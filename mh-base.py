@@ -35,7 +35,7 @@ class MHSampler(object):
 
 	def calculate_acceptance_ratio(self, proposal_state):
 		acceptance_ratio = np.exp(self.log_distribution_fn(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - self.log_distribution_fn(self.state) - self.log_transition_probabilities(proposal_state, self.state))
-		print(acceptance_ratio)
+		print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -74,7 +74,7 @@ def main():
 
 # using main MH on the bank data
 def bank_main():
-	proposal_variance, N = 100, 100 # TO BE DETERMINED such that acceptance prob is ~ 50%
+	proposal_variance, N = .0001, 50000 # TO BE DETERMINED such that acceptance prob is ~ 50%
 
 	feature_array, output_vector = create_arrays()
 	num_features = feature_array.shape[1]
