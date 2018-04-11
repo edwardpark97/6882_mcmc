@@ -1,19 +1,20 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from process_bank import create_arrays
 
 class MHSampler(object):
-	def __init__(self, f, g, g_sample, x0, iterations):
+	def __init__(self, log_f, log_g, g_sample, x0, iterations):
 		"""
 			Initialize a Metropolis-Hastings sampler for a target distribution P
 
-			f: a target distribution (or function proportional to the target distribution) that we will use to calculate acceptance ratios
-			g: a function that samples from the marginal probability density that defines the transition probabilities P(x|y) between samples, returns p(x|y) when given inputs x, y
+			log_f: the log of a target distribution (or function proportional to the target distribution) that we will use to calculate acceptance ratios
+			g: the log of a function that samples from the marginal probability density that defines the transition probabilities P(x|y) between samples, returns p(x|y) when given inputs x, y
 			g_sample: a function that takes in a state x and returns a randomly sampled state in P(*|x)
 			x0: the starting sample 
 			iterations: number of iterations to ruh MH for
 		"""
-		self.distribution_fn = f
-		self.get_transition_probabilities = g
+		self.log_distribution_fn = log_f
+		self.log_transition_probabilities = log_g
 		self.get_transition_sample = g_sample
 		self.state = x0
 		self.iterations = iterations
@@ -33,7 +34,8 @@ class MHSampler(object):
 			self.step_count += 1
 
 	def calculate_acceptance_ratio(self, proposal_state):
-		acceptance_ratio = self.distribution_fn(proposal_state) * self.get_transition_probabilities(self.state, proposal_state) / (self.distribution_fn(self.state) * self.get_transition_probabilities(proposal_state, self.state))
+		acceptance_ratio = np.exp(self.log_distribution_fn(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - self.log_distribution_fn(self.state) - self.log_transition_probabilities(proposal_state, self.state))
+		print(acceptance_ratio)
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -49,17 +51,17 @@ def main():
 
 	x0 = np.random.uniform(-1.0, 1.0)
 
-	def f_distribution_fn(val):
-		return np.exp(-val**2 / 2)/np.sqrt(2 * np.pi)
+	def log_f_distribution_fn(val):
+		return np.log(np.exp(-val**2 / 2)/np.sqrt(2 * np.pi))
 
-	def g_transition_prob(data, given):
+	def log_g_transition_prob(data, given):
 		# assume we know sig = 1
-		return np.exp(-(data - given)**2 / 2)/np.sqrt(2 * np.pi)
+		return np.log(np.exp(-(data - given)**2 / 2)/np.sqrt(2 * np.pi))
 
 	def g_sample(val):
 		return np.random.normal(loc = val, scale = true_sig)
 
-	sampler = MHSampler(f_distribution_fn, g_transition_prob, g_sample, x0, N)
+	sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
@@ -70,5 +72,38 @@ def main():
 
 	plt.show()
 
+# using main MH on the bank data
+def bank_main():
+	proposal_variance, N = 100, 100 # TO BE DETERMINED such that acceptance prob is ~ 50%
+
+	feature_array, output_vector = create_arrays()
+	num_features = feature_array.shape[1]
+	prior_mean, prior_variance = np.zeros(num_features), 100
+
+	x0 = np.random.multivariate_normal(prior_mean, np.identity(num_features) * prior_variance)
+
+	def log_multivariate_gaussian_pdf(x, y, variance):
+		# assuming the covariance matrix is identity * variance
+		return (-0.5 * (x - y).T.dot(np.identity(num_features) / variance).dot(x - y)) - (num_features / 2) * np.log(2 * np.pi * variance)
+
+	def log_f_distribution_fn(val):
+		# calculated based on the formula in section 3.1 of the paper
+		theta = feature_array.dot(val)
+		p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
+		prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
+		return np.sum(p_data) + prior
+
+	def log_g_transition_prob(data, given):
+		return log_multivariate_gaussian_pdf(data, given, proposal_variance)
+
+	def g_sample(val):
+		return np.random.multivariate_normal(val, np.identity(num_features) * proposal_variance)
+
+	sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	sampler.sample()
+
+	samples = sampler.get_saved_states()
+
+
 if __name__ == '__main__':
-	main()
+	bank_main()
