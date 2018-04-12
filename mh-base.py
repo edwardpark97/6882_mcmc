@@ -35,7 +35,6 @@ class MHSampler(object):
 
 	def calculate_acceptance_ratio(self, proposal_state):
 		acceptance_ratio = np.exp(self.log_distribution_fn(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - self.log_distribution_fn(self.state) - self.log_transition_probabilities(proposal_state, self.state))
-		print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -74,7 +73,7 @@ def main():
 
 # using main MH on the bank data
 def bank_main():
-	proposal_variance, N = .0001, 50000 # TO BE DETERMINED such that acceptance prob is ~ 50%
+	proposal_variance, N = .0005, 100000 # TO BE DETERMINED such that acceptance prob is ~ 50%
 
 	feature_array, output_vector = create_arrays()
 	num_features = feature_array.shape[1]
@@ -103,7 +102,19 @@ def bank_main():
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
+	samples = np.array(samples[20000:]) # burn-in time
 
+	for i in range(num_features):
+		plot_histogram(samples, i)
+
+
+def plot_histogram(samples, index):
+	count, bins, ignored = plt.hist(samples[:, index], 30, density=True)
+	plt.xlabel("Value")
+	plt.ylabel("Noramlized Probability")
+	plt.title(r"PDF of Weight Parameter $\beta_{%s}$" % index)
+	plt.savefig("plots/standard_bank/%s.png" % index, bbox_inches='tight')
+	plt.clf()
 
 if __name__ == '__main__':
 	bank_main()

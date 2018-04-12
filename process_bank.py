@@ -13,8 +13,7 @@ Education level (index 3) -> "basic.4y", "basic.6y", "basic.9y", "high.school", 
 Marital status (index 2) -> "divorced", "married", "single", "unknown"
 '''
 
-DATA_PATH = "bank-additional/bank-additional.csv"
-
+DATA_PATH = "bank-additional/bank-additional-full.csv"
 if "full" in DATA_PATH:
 	NUM_DATA_POINTS = 41188
 else:
