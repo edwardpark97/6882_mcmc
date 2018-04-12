@@ -13,13 +13,6 @@ Education level (index 3) -> "basic.4y", "basic.6y", "basic.9y", "high.school", 
 Marital status (index 2) -> "divorced", "married", "single", "unknown"
 '''
 
-DATA_PATH = "bank-additional/bank-additional-full.csv"
-if "full" in DATA_PATH:
-	NUM_DATA_POINTS = 41188
-else:
-	NUM_DATA_POINTS = 4119
-NUM_FEATURES = 18 # number of columns from above 
-
 # Input parameter is a row from the csv file
 # Returns a 18-length numpy vector
 def create_row_features(r):
@@ -45,11 +38,19 @@ def create_row_features(r):
 	assert sum(x[1:]) == 4 # exactly four of these should be 1
 	return np.array(x)
 
-def create_arrays():
-	feature_array = np.zeros((NUM_DATA_POINTS, NUM_FEATURES))
-	output_vector = np.zeros(NUM_DATA_POINTS)
+def create_arrays(data_path):
+	if data_path == 'bank-additional/bank-additional.csv':
+		num_data_points = 4119
+	elif data_path == 'bank-additional/bank-additional-full.csv':
+		num_data_points = 41188
+	else:
+		assert False
+	num_features = 18 # number of columns from above 
 
-	with open(DATA_PATH) as csvfile:
+	feature_array = np.zeros((num_data_points, num_features))
+	output_vector = np.zeros(num_data_points)
+
+	with open(data_path) as csvfile:
 		reader = csv.reader(csvfile)
 		next(reader) # skip the header row
 

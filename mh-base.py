@@ -34,7 +34,14 @@ class MHSampler(object):
 			self.step_count += 1
 
 	def calculate_acceptance_ratio(self, proposal_state):
-		acceptance_ratio = np.exp(self.log_distribution_fn(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - self.log_distribution_fn(self.state) - self.log_transition_probabilities(proposal_state, self.state))
+		log = self.log_distribution_fn(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - self.log_distribution_fn(self.state) - self.log_transition_probabilities(proposal_state, self.state)
+		if log > 0:
+			acceptance_ratio = 1
+		elif log < -20:
+			acceptance_ratio = 0
+		else:
+			acceptance_ratio = np.exp(log)
+		# print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -68,18 +75,20 @@ def main():
 	count, bins, ignored = plt.hist(np.array(samples), 30, normed=True)
 
 	plt.plot(bins, 1/(true_sig * np.sqrt(2 * np.pi)) * np.exp( - (bins - true_mu)**2 / (2 * true_sig**2) ), linewidth=2, color='r')
-
 	plt.show()
 
 # using main MH on the bank data
 def bank_main():
-	proposal_variance, N = .0005, 100000 # TO BE DETERMINED such that acceptance prob is ~ 50%
+	proposal_variance, N = .0005, 100000 # TO BE DETERMINED such that acceptance prob is ~ 20%
+	# use .0005 for the smaller bank dataset, .00005 for the larger bank dataset
 
-	feature_array, output_vector = create_arrays()
+	feature_array, output_vector = create_arrays('bank-additional/bank-additional.csv')
 	num_features = feature_array.shape[1]
 	prior_mean, prior_variance = np.zeros(num_features), 100
 
 	x0 = np.random.multivariate_normal(prior_mean, np.identity(num_features) * prior_variance)
+	x0 = [0.014, 2.5, 2.3, 5, -2.3, -3.2, -3, -3, -3, -3, 1, -3, -3, -3, .8, .8, 1, .8]
+	# hard code this in rn to avoid burn-in
 
 	def log_multivariate_gaussian_pdf(x, y, variance):
 		# assuming the covariance matrix is identity * variance
@@ -113,7 +122,7 @@ def plot_histogram(samples, index):
 	plt.xlabel("Value")
 	plt.ylabel("Noramlized Probability")
 	plt.title(r"PDF of Weight Parameter $\beta_{%s}$" % index)
-	plt.savefig("plots/standard_bank/%s.png" % index, bbox_inches='tight')
+	plt.savefig("plots/MH_bank/%s.png" % index, bbox_inches='tight')
 	plt.clf()
 
 if __name__ == '__main__':
