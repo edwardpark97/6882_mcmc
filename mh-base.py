@@ -79,15 +79,17 @@ def main():
 
 # using main MH on the bank data
 def bank_main():
-	proposal_variance, N = .0005, 100000 # TO BE DETERMINED such that acceptance prob is ~ 20%
-	# use .0005 for the smaller bank dataset, .00005 for the larger bank dataset
+	proposal_variance, burnin, N = .0005, 10000, 50000
+	# use .005 for the smaller bank dataset, .0005 for the larger bank dataset so that acceptance prob is ~ 25%
+	# to get runtimes around 1-2min, let N=100000 for small dataset, 20000 for large dataset
+	# 4000000 iterations for ~5 hours on large dataset
 
-	feature_array, output_vector = create_arrays('bank-additional/bank-additional.csv')
+	feature_array, output_vector = create_arrays('bank-additional/bank-additional-full.csv')
 	num_features = feature_array.shape[1]
 	prior_mean, prior_variance = np.zeros(num_features), 100
 
 	x0 = np.random.multivariate_normal(prior_mean, np.identity(num_features) * prior_variance)
-	x0 = [0.014, 2.5, 2.3, 5, -2.3, -3.2, -3, -3, -3, -3, 1, -3, -3, -3, .8, .8, 1, .8]
+	x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	# hard code this in rn to avoid burn-in
 
 	def log_multivariate_gaussian_pdf(x, y, variance):
@@ -111,17 +113,27 @@ def bank_main():
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
-	samples = np.array(samples[20000:]) # burn-in time
+	samples = np.array(samples[burnin:]) # burn-in time
 
 	for i in range(num_features):
-		plot_histogram(samples, i)
+		plot_tracking(samples, i)
 
+def plot_tracking(samples, index):
+	plt.figure(1, figsize=(5, 10))
 
-def plot_histogram(samples, index):
-	count, bins, ignored = plt.hist(samples[:, index], 30, density=True)
+	plt.subplot(211)
+	plt.title(r"PDF for Weight Parameter $\beta_{%s}$" % index)
+	plt.hist(samples[:, index], 60, density=True)
 	plt.xlabel("Value")
-	plt.ylabel("Noramlized Probability")
-	plt.title(r"PDF of Weight Parameter $\beta_{%s}$" % index)
+	plt.ylabel("Normalized Probability")
+
+	plt.subplot(212)
+	factor = int(len(samples) / 2000) # only plot 2000 points to make the plot look nicer
+	subsamples = samples[::factor, index]
+	plt.plot(subsamples, factor * np.arange(len(subsamples)), '.')
+	plt.title(r"Distribution over Iterations of Weight Parameter $\beta_{%s}$" % index)
+	plt.xlabel("Value")
+	plt.ylabel("Sample Iteration")
 	plt.savefig("plots/MH_bank/%s.png" % index, bbox_inches='tight')
 	plt.clf()
 

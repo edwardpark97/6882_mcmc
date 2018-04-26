@@ -16,24 +16,24 @@ Marital status (index 2) -> "divorced", "married", "single", "unknown"
 # Input parameter is a row from the csv file
 # Returns a 18-length numpy vector
 def create_row_features(r):
-	x = [r[0],
-		r[14] == "failure",
-		r[14] == "nonexistent",
-		r[14] == "success",
-		r[7] == "cellular",
-		r[7] == "telephone",
-		r[3] == "basic.4y",
-		r[3] == "basic.6y",
-		r[3] == "basic.9y",
-		r[3] == "high.school",
-		r[3] == "illiterate",
-		r[3] == "professional.course",
-		r[3] == "university.degree",
-		r[3] == "unknown",
-		r[2] == "divorced",
-		r[2] == "married",
-		r[2] == "single",
-		r[2] == "unknown"]
+	x = [r[0],							# 0
+		r[14] == "failure",				# 1
+		r[14] == "nonexistent",			# 2
+		r[14] == "success",				# 3
+		r[7] == "cellular",				# 4
+		r[7] == "telephone",			# 5
+		r[3] == "basic.4y",				# 6
+		r[3] == "basic.6y",				# 7
+		r[3] == "basic.9y",				# 8
+		r[3] == "high.school",			# 9
+		r[3] == "illiterate",			# 10
+		r[3] == "professional.course",	# 11
+		r[3] == "university.degree",	# 12
+		r[3] == "unknown",				# 13
+		r[2] == "divorced",				# 14
+		r[2] == "married",				# 15
+		r[2] == "single",				# 16
+		r[2] == "unknown"]				# 17
 	x = list(map(int, x))
 	assert sum(x[1:]) == 4 # exactly four of these should be 1
 	return np.array(x)
@@ -61,9 +61,10 @@ def create_arrays(data_path):
 			output_vector[row_count] = int(processed_row[20] == "yes")
 			row_count += 1
 
-		# center the age feature
+		# log and center the age feature
 		age_vector = feature_array[:, 0]
-		feature_array[:, 0] = age_vector - np.mean(age_vector)
+		logged = np.log(age_vector)
+		feature_array[:, 0] = logged - np.mean(logged)
 
 		return feature_array, output_vector
 			
