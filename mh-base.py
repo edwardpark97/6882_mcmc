@@ -43,7 +43,7 @@ class MHSampler(object):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
-		# print(min(1, acceptance_ratio))
+		print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -66,8 +66,8 @@ def main(dataset):
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional-full.csv')
 		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "freddie_mac":
-		# N=2000 takes about 7 min
-		proposal_variance, burnin, N = 2e-6, 0, 2000
+		# N=2000 takes about 7 min, N=100000 takes ~6 hours
+		proposal_variance, burnin, N = 2e-6, 10000, 100000
 		feature_array, output_vector = process_freddie.create_arrays()
 		x0 = [0, 0, 0, 0, -2.2, -4.1, -3.8]
 	else:
