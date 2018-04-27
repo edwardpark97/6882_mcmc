@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from process_bank import create_arrays
+import process_bank
+import process_freddie
+import os
 
 class MHSampler(object):
 	def __init__(self, log_f, log_g, g_sample, x0, iterations):
@@ -51,46 +53,31 @@ class MHSampler(object):
 	def get_saved_states(self):
 		return self.saved_states
 
-def main():
-	# estimate mean given sig = 1
-	true_mu, true_sig, N = 0, 1, 100000
-
-	x0 = np.random.uniform(-1.0, 1.0)
-
-	def log_f_distribution_fn(val):
-		return np.log(np.exp(-val**2 / 2)/np.sqrt(2 * np.pi))
-
-	def log_g_transition_prob(data, given):
-		# assume we know sig = 1
-		return np.log(np.exp(-(data - given)**2 / 2)/np.sqrt(2 * np.pi))
-
-	def g_sample(val):
-		return np.random.normal(loc = val, scale = true_sig)
-
-	sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
-	sampler.sample()
-
-	samples = sampler.get_saved_states()
-
-	count, bins, ignored = plt.hist(np.array(samples), 30, normed=True)
-
-	plt.plot(bins, 1/(true_sig * np.sqrt(2 * np.pi)) * np.exp( - (bins - true_mu)**2 / (2 * true_sig**2) ), linewidth=2, color='r')
-	plt.show()
-
 # using main MH on the bank data
-def bank_main():
-	proposal_variance, burnin, N = .0005, 10000, 50000
-	# use .005 for the smaller bank dataset, .0005 for the larger bank dataset so that acceptance prob is ~ 25%
-	# to get runtimes around 1-2min, let N=100000 for small dataset, 20000 for large dataset
-	# 4000000 iterations for ~5 hours on large dataset
+def main(dataset):
+	if dataset == "bank_small":
+		# N=100000 takes 1-2 min
+		proposal_variance, burnin, N = .005, 10000, 100000
+		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional.csv')
+		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
+	elif dataset == "bank_large":
+		# N=20000 takes 1-2 min, N=4000000 takes ~5 hours
+		proposal_variance, burnin, N = .0005, 1000, 20000
+		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional-full.csv')
+		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
+	elif dataset == "freddie_mac":
+		# N=2000 takes about 7 min
+		proposal_variance, burnin, N = 2e-6, 0, 2000
+		feature_array, output_vector = process_freddie.create_arrays()
+		x0 = [0, 0, 0, 0, -2.2, -4.1, -3.8]
+	else:
+		assert False
 
-	feature_array, output_vector = create_arrays('bank-additional/bank-additional-full.csv')
 	num_features = feature_array.shape[1]
 	prior_mean, prior_variance = np.zeros(num_features), 100
 
-	x0 = np.random.multivariate_normal(prior_mean, np.identity(num_features) * prior_variance)
-	x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
-	# hard code this in rn to avoid burn-in
+	# x0 is currently hard-coded in to avoid burn-in time
+	# x0 = np.random.multivariate_normal(prior_mean, np.identity(num_features) * prior_variance)
 
 	def log_multivariate_gaussian_pdf(x, y, variance):
 		# assuming the covariance matrix is identity * variance
@@ -113,12 +100,12 @@ def bank_main():
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
-	samples = np.array(samples[burnin:]) # burn-in time
+	samples = np.array(samples[burnin:])
 
 	for i in range(num_features):
-		plot_tracking(samples, i)
+		plot_tracking(samples, i, "plots/%s" % dataset)
 
-def plot_tracking(samples, index):
+def plot_tracking(samples, index, directory_path):
 	plt.figure(1, figsize=(5, 10))
 
 	plt.subplot(211)
@@ -134,8 +121,11 @@ def plot_tracking(samples, index):
 	plt.title(r"Distribution over Iterations of Weight Parameter $\beta_{%s}$" % index)
 	plt.xlabel("Value")
 	plt.ylabel("Sample Iteration")
-	plt.savefig("plots/MH_bank/%s.png" % index, bbox_inches='tight')
+
+	if not os.path.exists(directory_path):
+		os.makedirs(directory_path)
+	plt.savefig("%s/%s.png" % (directory_path, index), bbox_inches='tight')
 	plt.clf()
 
 if __name__ == '__main__':
-	bank_main()
+	main("freddie_mac")

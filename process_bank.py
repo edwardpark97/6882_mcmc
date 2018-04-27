@@ -69,6 +69,4 @@ def create_arrays(data_path):
 		return feature_array, output_vector
 			
 if __name__ == "__main__":
-	feature_array, output_vector = create_arrays()
-	print(feature_array)
-	print(output_vector)
+	feature_array, output_vector = create_arrays('bank-additional/bank-additional-full.csv')

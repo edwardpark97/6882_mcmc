@@ -1,1 +1,4 @@
 __pycache__/
+freddie_mac/historical*
+freddie_mac/np_arrays.npz
+.DS_Store
