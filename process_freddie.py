@@ -1,5 +1,16 @@
+import boto3
+import botocore
 import csv
 import numpy as np
+
+ACCESS_ID = 'ACCESS_ID_HERE'
+ACCESS_KEY = 'SECRET_KEY_HERE'
+AWS_BUCKET = '6882-mcmc'
+FREDDIE_MAC_FILEPATH = 'freddie_mac_arrays.npz'
+
+s3 = boto3.resource('s3', 
+	aws_access_key_id=ACCESS_ID,
+	aws_secret_access_key=ACCESS_KEY)
 
 '''
 Dependent Variable:
@@ -32,9 +43,11 @@ def create_row_features(r):
 
 def create_arrays():
 	try:
+		s3.Bucket(AWS_BUCKET).download_file(FREDDIE_MAC_FILEPATH, 'freddie_mac/np_arrays.npz')
 		np_array = np.load("freddie_mac/np_arrays.npz")
 		return np_array['feature_array'], np_array['output_vector']
-	except FileNotFoundError:
+	except Exception as e:
+		print(e)
 		pass # continue on to rest of function
 
 	q1, q2, q3, q4 = 587250, 654170, 381904, 350521 # num data points in each file
