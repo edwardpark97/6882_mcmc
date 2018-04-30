@@ -1,10 +1,11 @@
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 import process_bank
 import process_freddie
 import os
 
-class MHSampler(object):
+class MCMCSampler(object):
 	def __init__(self, log_f, log_g, g_sample, x0, iterations):
 		"""
 			Initialize a Metropolis-Hastings sampler for a target distribution P
@@ -26,6 +27,16 @@ class MHSampler(object):
 		self.step_count = 0
 
 	def sample(self):
+		raise NotImplementedError
+
+	def calculate_acceptance_ratio(self, proposal_state):
+		raise NotImplementedError
+
+	def transition_step(self, candidate_state, acceptance_ratio):
+		raise NotImplementedError
+
+class MHSampler(MCMCSampler):
+	def sample(self):
 		for i in range(self.iterations):
 			candidate_state = self.get_transition_sample(self.state)
 			acceptance = self.calculate_acceptance_ratio(candidate_state)
@@ -43,7 +54,6 @@ class MHSampler(object):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
-		print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -52,6 +62,10 @@ class MHSampler(object):
 
 	def get_saved_states(self):
 		return self.saved_states
+
+class GibbsSampler(MHSampler):
+	def calculate_acceptance_ration(self, proposal_state):
+		return 1.0
 
 # using main MH on the bank data
 def main(dataset):
@@ -67,9 +81,9 @@ def main(dataset):
 		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		proposal_variance, burnin, N = 2e-6, 10000, 100000
+		proposal_variance, burnin, N = 2e-6, 200, 4000
 		feature_array, output_vector = process_freddie.create_arrays()
-		x0 = [0, 0, 0, 0, -2.2, -4.1, -3.8]
+		x0 = [0, 0, 0, 0, 0, 0, 0]
 	else:
 		assert False
 
@@ -96,16 +110,17 @@ def main(dataset):
 	def g_sample(val):
 		return np.random.multivariate_normal(val, np.identity(num_features) * proposal_variance)
 
-	sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	sampler = GibbsSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
 
 	for i in range(num_features):
-		plot_tracking(samples, i, "plots/%s" % dataset)
+		plot_tracking(samples, i, "plots/gibbs_{}".format(dataset))
 
 def plot_tracking(samples, index, directory_path):
+	print(len(samples))
 	plt.figure(1, figsize=(5, 10))
 
 	plt.subplot(211)
@@ -115,7 +130,7 @@ def plot_tracking(samples, index, directory_path):
 	plt.ylabel("Normalized Probability")
 
 	plt.subplot(212)
-	factor = int(len(samples) / 2000) # only plot 2000 points to make the plot look nicer
+	factor = int(math.ceil(len(samples) / 2000.)) # only plot 2000 points to make the plot look nicer
 	subsamples = samples[::factor, index]
 	plt.plot(subsamples, factor * np.arange(len(subsamples)), '.')
 	plt.title(r"Distribution over Iterations of Weight Parameter $\beta_{%s}$" % index)
