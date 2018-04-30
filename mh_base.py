@@ -38,6 +38,8 @@ class MCMCSampler(object):
 class MHSampler(MCMCSampler):
 	def sample(self):
 		for i in range(self.iterations):
+			if i % 1000 == 0:
+				print("iteration {}".format(i))
 			candidate_state = self.get_transition_sample(self.state)
 			acceptance = self.calculate_acceptance_ratio(candidate_state)
 			new_state = self.transition_step(candidate_state, acceptance)
@@ -67,6 +69,34 @@ class GibbsSampler(MHSampler):
 	def calculate_acceptance_ration(self, proposal_state):
 		return 1.0
 
+class ConsensusMHSampler(MCMCSampler):
+	def __init__(self, log_f, log_g, g_sample, x0, iterations, shards=1):
+		super(ConsensusMHSampler, self).__init__(log_f, log_g, g_sample, x0, iterations)
+		self.shards = shards
+
+		assert len(log_f) == self.shards
+
+		self.pool = Pool(processes=self.shards)
+
+	def sample(self):
+		map_results = self.pool.map(self.map_sample, )
+
+	def map_sample(self):
+
+	def reduce_sample(self, results):
+		'''
+			results is a list of (sample, weight) tuples
+		'''
+
+		th_g_num = 0
+		th_g_den = 0
+		for (sample, weight) in results:
+			th_g_num += sample * float(weight)
+			th_g_den += float(weight)
+
+		return th_g_num / th_g_den
+
+
 # using main MH on the bank data
 def main(dataset):
 	if dataset == "bank_small":
@@ -81,7 +111,7 @@ def main(dataset):
 		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		proposal_variance, burnin, N = 2e-6, 200, 4000
+		proposal_variance, burnin, N = 2e-6, 10000, 100000
 		feature_array, output_vector = process_freddie.create_arrays()
 		x0 = [0, 0, 0, 0, 0, 0, 0]
 	else:
@@ -110,17 +140,16 @@ def main(dataset):
 	def g_sample(val):
 		return np.random.multivariate_normal(val, np.identity(num_features) * proposal_variance)
 
-	sampler = GibbsSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	sampler = ConsensusMHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
 
 	for i in range(num_features):
-		plot_tracking(samples, i, "plots/gibbs_{}".format(dataset))
+		plot_tracking(samples, i, "plots/{}_100000".format(dataset))
 
 def plot_tracking(samples, index, directory_path):
-	print(len(samples))
 	plt.figure(1, figsize=(5, 10))
 
 	plt.subplot(211)
@@ -139,7 +168,7 @@ def plot_tracking(samples, index, directory_path):
 
 	if not os.path.exists(directory_path):
 		os.makedirs(directory_path)
-	plt.savefig("%s/%s.png" % (directory_path, index), bbox_inches='tight')
+	plt.savefig("%s/%s_gibbs.png" % (directory_path, index), bbox_inches='tight')
 	plt.clf()
 
 if __name__ == '__main__':
