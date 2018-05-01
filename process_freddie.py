@@ -1,18 +1,22 @@
-import boto3
-import botocore
 import csv
 import numpy as np
 
-ACCESS_ID = 'ACCESS_ID_HERE'
-ACCESS_KEY = 'SECRET_KEY_HERE'
-AWS_BUCKET = '6882-mcmc'
-FREDDIE_MAC_FILEPATH = 'freddie_mac_arrays.npz'
+# Try downloading the numpy file from AWS
+try:
+	import boto3
+	import botocore
+	ACCESS_ID = 'ACCESS_ID_HERE'
+	ACCESS_KEY = 'SECRET_KEY_HERE'
+	AWS_BUCKET = '6882-mcmc'
+	FREDDIE_MAC_FILEPATH = 'freddie_mac_arrays.npz'
+	s3 = boto3.resource('s3', 
+		aws_access_key_id=ACCESS_ID,
+		aws_secret_access_key=ACCESS_KEY)
+	s3.Bucket(AWS_BUCKET).download_file(FREDDIE_MAC_FILEPATH, 'freddie_mac/np_arrays.npz')
+except Exception:
+	pass
 
-s3 = boto3.resource('s3', 
-	aws_access_key_id=ACCESS_ID,
-	aws_secret_access_key=ACCESS_KEY)
-
-'''
+'''	
 Dependent Variable:
 whether a loan was foreclosed by the end of september 2017
 	go into time-historical data,
@@ -42,13 +46,13 @@ def create_row_features(r):
 	return np.array(x)
 
 def create_arrays():
+	# Try loading the numpy array
 	try:
-		s3.Bucket(AWS_BUCKET).download_file(FREDDIE_MAC_FILEPATH, 'freddie_mac/np_arrays.npz')
 		np_array = np.load("freddie_mac/np_arrays.npz")
 		return np_array['feature_array'], np_array['output_vector']
 	except Exception as e:
 		print(e)
-		pass # continue on to rest of function
+		pass # if it doesn't work, recompute it
 
 	q1, q2, q3, q4 = 587250, 654170, 381904, 350521 # num data points in each file
 	num_data_points = q1 + q2 + q3 + q4
