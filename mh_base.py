@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+from pathos.multiprocessing import ProcessingPool as Pool
 import process_bank
 import process_freddie
 import os
@@ -66,7 +67,7 @@ class MHSampler(MCMCSampler):
 		return self.saved_states
 
 class GibbsSampler(MHSampler):
-	def calculate_acceptance_ration(self, proposal_state):
+	def calculate_acceptance_ratio(self, proposal_state):
 		return 1.0
 
 class ConsensusMHSampler(MCMCSampler):
@@ -74,14 +75,32 @@ class ConsensusMHSampler(MCMCSampler):
 		super(ConsensusMHSampler, self).__init__(log_f, log_g, g_sample, x0, iterations)
 		self.shards = shards
 
-		assert len(log_f) == self.shards
+		assert len(self.log_distribution_fn) == self.shards
+		self.log_fn_dict = {} # for pickling purposes
+		for i in range(self.shards):
+			self.log_fn_dict[i] = self.log_distribution_fn[i]
 
 		self.pool = Pool(processes=self.shards)
 
 	def sample(self):
-		map_results = self.pool.map(self.map_sample, )
+		for i in range(self.iterations):
+			if i % 1000 == 0:
+				print("iteration {}".format(i))
+			map_results = self.pool.map(self.map_sample, range(self.shards))
+			new_state = self.reduce_sample(map_results)
+			self.saved_states.append(new_state)
+			self.state = new_state
 
-	def map_sample(self):
+			self.step_count += 1
+
+	def map_sample(self, index):
+		candidate_state = self.get_transition_sample(self.state)
+		acceptance = self.calculate_acceptance_ratio(candidate_state, index)
+		sample = self.transition_step(candidate_state, acceptance)
+
+		sample_variance = self.calulate_sample_variance(sample)
+
+		return (sample, 1. / sample_variance)
 
 	def reduce_sample(self, results):
 		'''
@@ -95,6 +114,28 @@ class ConsensusMHSampler(MCMCSampler):
 			th_g_den += float(weight)
 
 		return th_g_num / th_g_den
+
+	def calculate_acceptance_ratio(self, proposal_state, index=0):
+		log_fn = self.log_fn_dict[index]
+		log = log_fn(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - log_fn(self.state) - self.log_transition_probabilities(proposal_state, self.state)
+		if log > 0:
+			acceptance_ratio = 1
+		elif log < -20:
+			acceptance_ratio = 0
+		else:
+			acceptance_ratio = np.exp(log)
+		return min(1, acceptance_ratio)
+
+	def calculate_sample_variance(sample):
+		total_samples = self.get_saved_states() + [sample]
+		return np.var(np.array(total_samples), axis=0)
+
+	def transition_step(self, candidate_state, acceptance_ratio):
+		u = np.random.uniform()
+		return self.state if u > acceptance_ratio else candidate_state
+
+	def get_saved_states(self):
+		return self.saved_states
 
 
 # using main MH on the bank data
@@ -111,7 +152,7 @@ def main(dataset):
 		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		proposal_variance, burnin, N = 2e-6, 10000, 100000
+		proposal_variance, burnin, N = 2e-6, 1000, 20000
 		feature_array, output_vector = process_freddie.create_arrays()
 		x0 = [0, 0, 0, 0, 0, 0, 0]
 	else:
@@ -140,7 +181,22 @@ def main(dataset):
 	def g_sample(val):
 		return np.random.multivariate_normal(val, np.identity(num_features) * proposal_variance)
 
-	sampler = ConsensusMHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	num_points = feature_array.shape[0]
+	split_indices = []
+	for i in range(1, 4):
+		split_indices.append(int(math.floor(0.25 * i * num_points)))
+	split_feature_array = np.split(feature_array, split_indices)
+
+	log_fns = []
+	for features in split_feature_array:
+		def log_f_split_distribution_fn(val):
+			theta = features.dot(val)
+			p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
+			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
+			return np.sum(p_data) + prior
+		log_fns.append(log_f_split_distribution_fn)
+
+	sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
@@ -168,7 +224,7 @@ def plot_tracking(samples, index, directory_path):
 
 	if not os.path.exists(directory_path):
 		os.makedirs(directory_path)
-	plt.savefig("%s/%s_gibbs.png" % (directory_path, index), bbox_inches='tight')
+	plt.savefig("%s/%s_consensus.png" % (directory_path, index), bbox_inches='tight')
 	plt.clf()
 
 if __name__ == '__main__':
