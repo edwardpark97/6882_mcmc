@@ -3,19 +3,43 @@ import numpy as np
 
 '''
 Dependent Variable:
-Whether they subscribed or not (index 20)
+21 - y - has the client subscribed a term deposit? (binary: 'yes','no')
 
-Predictor Variables:
-Age in years (index 0) -> numerical age
-Client's previous promotion outcome (index 14) -> "failure", "nonexistent", "success"
-Type of contact (index 7) ->  "cellular", "telephone"
-Education level (index 3) -> "basic.4y", "basic.6y", "basic.9y", "high.school", "illiterate", "professional.course", "university.degree", "unknown"
-Marital status (index 2) -> "divorced", "married", "single", "unknown"
+Predictor Variables (NOT DISCRETE):
+Indexes are 1-indexed
+1 - age (numeric)
+12 - campaign: number of contacts performed during this campaign and for this client (numeric, includes last contact)
+13 - pdays: number of days that passed by after the client was last contacted from a previous campaign (numeric; 999 means client was not previously contacted)
+14 - previous: number of contacts performed before this campaign and for this client (numeric)
+16 - emp.var.rate: employment variation rate - quarterly indicator (numeric)
+17 - cons.price.idx: consumer price index - monthly indicator (numeric) 
+18 - cons.conf.idx: consumer confidence index - monthly indicator (numeric) 
+19 - euribor3m: euribor 3 month rate - daily indicator (numeric)
+20 - nr.employed: number of employees - quarterly indicator (numeric)
+
+Predictor Variables (DISCRETE):
+Indexes are 1-indexed
+1 - age (numeric)
+15 - poutcome: outcome of the previous marketing campaign (categorical: 'failure','nonexistent','success')
+8 - contact: contact communication type (categorical: 'cellular','telephone') 
+4 - education (categorical: 'basic.4y','basic.6y','basic.9y','high.school','illiterate','professional.course','university.degree','unknown')
+3 - marital : marital status (categorical: 'divorced','married','single','unknown'; note: 'divorced' means divorced or widowed)
 '''
 
-# Input parameter is a row from the csv file
-# Returns a 18-length numpy vector
 def create_row_features(r):
+	x = [r[0],		# 0 age
+		r[11],		# 1 campaign
+		r[12],		# 2 pdays
+		r[13],		# 3 previous
+		r[15],		# 4 emp.var.rate
+		r[16],		# 5 cons.price.idx
+		r[17],		# 6 cons.conf.idx
+		r[18],		# 7 euribor3m
+		r[19]]		# 8 nr.employed
+	return np.array(x)
+
+# PROBABLY NOT USED ANYMORE
+def create_row_features_discrete(r):
 	x = [r[0],							# 0
 		r[14] == "failure",				# 1
 		r[14] == "nonexistent",			# 2
@@ -38,14 +62,14 @@ def create_row_features(r):
 	assert sum(x[1:]) == 4 # exactly four of these should be 1
 	return np.array(x)
 
-def create_arrays(data_path):
+def create_arrays(data_path, use_discrete_vars=False):
 	if data_path == 'bank-additional/bank-additional.csv':
 		num_data_points = 4119
 	elif data_path == 'bank-additional/bank-additional-full.csv':
 		num_data_points = 41188
 	else:
 		assert False
-	num_features = 18 # number of columns from above 
+	num_features = 18 if use_discrete_vars else 9 # number of columns from above 
 
 	feature_array = np.zeros((num_data_points, num_features))
 	output_vector = np.zeros(num_data_points)
@@ -57,14 +81,19 @@ def create_arrays(data_path):
 		row_count = 0
 		for row in reader:
 			processed_row = row[0].replace("\"", "").split(";") # split the row into an array and get rid of quotation marks
-			feature_array[row_count] = create_row_features(processed_row)
+			feature_array[row_count] = create_row_features_discrete(processed_row) if use_discrete_vars \
+										else create_row_features(processed_row)
 			output_vector[row_count] = int(processed_row[20] == "yes")
 			row_count += 1
 
 		# log and center the age feature
-		age_vector = feature_array[:, 0]
-		logged = np.log(age_vector)
-		feature_array[:, 0] = logged - np.mean(logged)
+		# age_vector = feature_array[:, 0]
+		# logged = np.log(age_vector)
+		# feature_array[:, 0] = logged - np.mean(logged)
+
+		# norm each variable to have mean 0 and std 1
+		meaned = feature_array - np.mean(feature_array, axis=0)
+		feature_array = meaned / np.std(meaned, axis=0)
 
 		return feature_array, output_vector
 			

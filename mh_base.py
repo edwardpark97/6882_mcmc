@@ -57,6 +57,7 @@ class MHSampler(MCMCSampler):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
+		# print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -144,19 +145,16 @@ class ConsensusMHSampler(MCMCSampler):
 def main(dataset):
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
-		proposal_variance, burnin, N = .005, 10000, 100000
+		proposal_variance, burnin, N, save_graphs = .001, 10000, 20000, False
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional.csv')
-		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "bank_large":
 		# N=20000 takes 1-2 min, N=4000000 takes ~5 hours
-		proposal_variance, burnin, N = .0005, 1000, 20000
+		proposal_variance, burnin, N, save_graphs = .0001, 1000, 20000, True
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional-full.csv')
-		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		proposal_variance, burnin, N = 2e-6, 1000, 20000
+		proposal_variance, burnin, N, save_graphs = 2e-6, 200, 2000, True
 		feature_array, output_vector = process_freddie.create_arrays()
-		x0 = [0, 0, 0, 0, 0, 0, 0]
 	else:
 		assert False
 
@@ -165,6 +163,7 @@ def main(dataset):
 
 	# x0 is currently hard-coded in to avoid burn-in time
 	# x0 = np.random.multivariate_normal(prior_mean, np.identity(num_features) * prior_variance)
+	x0 = np.zeros(num_features)
 
 	def log_multivariate_gaussian_pdf(x, y, variance):
 		# assuming the covariance matrix is identity * variance
@@ -200,13 +199,15 @@ def main(dataset):
 		log_fns.append(log_f_split_distribution_fn)
 
 	sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
+	# sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
 
-	for i in range(num_features):
-		plot_tracking(samples, i, "plots/{}_100000".format(dataset))
+	if save_graphs:
+		for i in range(num_features):
+			plot_tracking(samples, i, "plots/{}".format(dataset))
 
 def plot_tracking(samples, index, directory_path):
 	plt.figure(1, figsize=(5, 10))
