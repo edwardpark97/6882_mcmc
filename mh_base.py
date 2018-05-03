@@ -7,7 +7,7 @@ import process_freddie
 import os
 
 class MCMCSampler(object):
-	def __init__(self, log_f, log_g, g_sample, x0, iterations):
+	def __init__(self, data, log_f, log_g, g_sample, x0, iterations):
 		"""
 			Initialize a Metropolis-Hastings sampler for a target distribution P
 
@@ -86,7 +86,9 @@ class ConsensusMHSampler(MCMCSampler):
 		for i in range(self.iterations):
 			if i % 1000 == 0:
 				print("iteration {}".format(i))
-			map_results = self.pool.map(self.map_sample, range(self.shards))
+			map_results = []
+			for j in range(self.shards):
+				map_results.append(self.map_sample(j))
 			new_state = self.reduce_sample(map_results)
 			self.saved_states.append(new_state)
 			self.state = new_state
@@ -98,9 +100,9 @@ class ConsensusMHSampler(MCMCSampler):
 		acceptance = self.calculate_acceptance_ratio(candidate_state, index)
 		sample = self.transition_step(candidate_state, acceptance)
 
-		sample_variance = self.calulate_sample_variance(sample)
+		sample_variance = np.linalg.norm(self.calculate_sample_variance(sample))
 
-		return (sample, 1. / sample_variance)
+		return (np.array(sample), 1. / (sample_variance + 1e-8))
 
 	def reduce_sample(self, results):
 		'''
@@ -126,7 +128,7 @@ class ConsensusMHSampler(MCMCSampler):
 			acceptance_ratio = np.exp(log)
 		return min(1, acceptance_ratio)
 
-	def calculate_sample_variance(sample):
+	def calculate_sample_variance(self, sample):
 		total_samples = self.get_saved_states() + [sample]
 		return np.var(np.array(total_samples), axis=0)
 
@@ -186,12 +188,13 @@ def main(dataset):
 	for i in range(1, 4):
 		split_indices.append(int(math.floor(0.25 * i * num_points)))
 	split_feature_array = np.split(feature_array, split_indices)
+	split_output_vector = np.split(output_vector, split_indices)
 
 	log_fns = []
-	for features in split_feature_array:
+	for features, outputs in zip(split_feature_array, split_output_vector):
 		def log_f_split_distribution_fn(val):
 			theta = features.dot(val)
-			p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
+			p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
 			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
 			return np.sum(p_data) + prior
 		log_fns.append(log_f_split_distribution_fn)
