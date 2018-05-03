@@ -1,4 +1,8 @@
 __pycache__/
+*.pyc
 freddie_mac/historical*
+freddie_mac/READ_ME.pdf
 freddie_mac/np_arrays.npz
 .DS_Store
+out.txt
+test.py
