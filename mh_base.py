@@ -7,7 +7,7 @@ import process_freddie
 import os
 
 class MCMCSampler(object):
-	def __init__(self, data, log_f, log_g, g_sample, x0, iterations):
+	def __init__(self, log_f, log_g, g_sample, x0, iterations):
 		"""
 			Initialize a Metropolis-Hastings sampler for a target distribution P
 
@@ -164,10 +164,6 @@ def main(dataset):
 	num_features = feature_array.shape[1]
 	prior_mean, prior_variance = np.zeros(num_features), 100
 
-	# x0 is currently hard-coded in to avoid burn-in time
-	# x0 = np.random.multivariate_normal(prior_mean, np.identity(num_features) * prior_variance)
-	x0 = np.zeros(num_features)
-
 	def log_multivariate_gaussian_pdf(x, y, variance):
 		# assuming the covariance matrix is identity * variance
 		return (-0.5 * (x - y).T.dot(np.identity(num_features) / variance).dot(x - y)) - (num_features / 2) * np.log(2 * np.pi * variance)
@@ -201,8 +197,8 @@ def main(dataset):
 			return np.sum(p_data) + prior
 		log_fns.append(log_f_split_distribution_fn)
 
-	sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
-	# sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	# sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
+	sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
