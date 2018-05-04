@@ -1,21 +1,7 @@
 import csv
 import numpy as np
+import os
 
-# Try downloading the numpy file from AWS
-try:
-	import boto3
-	import botocore
-	ACCESS_ID = 'ACCESS_ID_HERE'
-	ACCESS_KEY = 'SECRET_KEY_HERE'
-	AWS_BUCKET = '6882-mcmc'
-	FREDDIE_MAC_FILEPATH = 'freddie_mac_arrays.npz'
-	s3 = boto3.resource('s3', 
-		aws_access_key_id=ACCESS_ID,
-		aws_secret_access_key=ACCESS_KEY)
-	s3.Bucket(AWS_BUCKET).download_file(FREDDIE_MAC_FILEPATH, 'freddie_mac/np_arrays.npz')
-except Exception:
-	print("Tried to download from AWS bucket, didn't work")
-	pass
 
 '''	
 Dependent Variable:
@@ -72,12 +58,24 @@ def create_row_features_discrete(r):
 
 def create_arrays(use_discrete_vars=False):
 	# Try loading the numpy array
-	try:
+	if os.path.isfile("freddie_mac/np_arrays.npz"):
 		np_array = np.load("freddie_mac/np_arrays.npz")
 		return np_array['feature_array'], np_array['output_vector']
-	except Exception as e:
-		print(e)
-		pass # if it doesn't work, recompute it
+	else:
+		try:
+			import boto3
+			import botocore
+			ACCESS_ID = 'ACCESS_ID_HERE'
+			ACCESS_KEY = 'ACCESS_KEY_HERE'
+			AWS_BUCKET = '6882-mcmc'
+			FREDDIE_MAC_FILEPATH = 'freddie_mac_arrays.npz'
+			s3 = boto3.resource('s3', 
+				aws_access_key_id=ACCESS_ID,
+				aws_secret_access_key=ACCESS_KEY)
+			s3.Bucket(AWS_BUCKET).download_file(FREDDIE_MAC_FILEPATH, 'freddie_mac/np_arrays.npz')
+		except Exception:
+			print("Tried to download from AWS bucket, didn't work")
+			pass
 
 	q1, q2, q3, q4 = 587250, 654170, 381904, 350521 # num data points in each file
 	num_data_points = q1 + q2 + q3 + q4

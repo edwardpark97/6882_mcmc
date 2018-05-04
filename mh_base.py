@@ -145,16 +145,19 @@ class ConsensusMHSampler(MCMCSampler):
 def main(dataset):
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
-		proposal_variance, burnin, N, save_graphs = .001, 10000, 20000, False
+		proposal_variance, burnin, N = .005, 10000, 100000
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional.csv')
+		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "bank_large":
 		# N=20000 takes 1-2 min, N=4000000 takes ~5 hours
-		proposal_variance, burnin, N, save_graphs = .0001, 1000, 20000, True
+		proposal_variance, burnin, N = .0005, 1000, 20000
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional-full.csv')
+		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		proposal_variance, burnin, N, save_graphs = 2e-6, 200, 2000, True
+		proposal_variance, burnin, N = 2e-6, 1000, 20000
 		feature_array, output_vector = process_freddie.create_arrays()
+		x0 = [0, 0, 0, 0, 0, 0, 0]
 	else:
 		assert False
 
@@ -205,9 +208,8 @@ def main(dataset):
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
 
-	if save_graphs:
-		for i in range(num_features):
-			plot_tracking(samples, i, "plots/{}".format(dataset))
+	for i in range(num_features):
+		plot_tracking(samples, i, "plots/{}".format(dataset))
 
 def plot_tracking(samples, index, directory_path):
 	plt.figure(1, figsize=(5, 10))
