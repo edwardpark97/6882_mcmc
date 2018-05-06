@@ -72,11 +72,13 @@ class GibbsSampler(MHSampler):
 		return 1.0
 
 class ConsensusMHSampler(MCMCSampler):
-	def __init__(self, log_f, log_g, g_sample, x0, iterations, shards=1):
+	def __init__(self, log_f, log_g, g_sample, x0, iterations, shards=1, weights=[1]):
 		super(ConsensusMHSampler, self).__init__(log_f, log_g, g_sample, x0, iterations)
 		self.shards = shards
+		self.weights = weights
 
 		assert len(self.log_distribution_fn) == self.shards
+		assert len(self.weights) == self.shards
 		self.log_fn_dict = {} # for pickling purposes
 		for i in range(self.shards):
 			self.log_fn_dict[i] = self.log_distribution_fn[i]
@@ -101,9 +103,7 @@ class ConsensusMHSampler(MCMCSampler):
 		acceptance = self.calculate_acceptance_ratio(candidate_state, index)
 		sample = self.transition_step(candidate_state, acceptance)
 
-		sample_variance = np.linalg.norm(self.calculate_sample_variance(sample))
-
-		return (np.array(sample), 1. / (sample_variance + 1e-8))
+		return np.array(sample), index
 
 	def reduce_sample(self, results):
 		'''
@@ -112,9 +112,9 @@ class ConsensusMHSampler(MCMCSampler):
 
 		th_g_num = 0
 		th_g_den = 0
-		for (sample, weight) in results:
-			th_g_num += sample * float(weight)
-			th_g_den += float(weight)
+		for (sample, weight_ind) in results:
+			th_g_num += sample * float(self.weights[weight_ind])
+			th_g_den += float(self.weights[weight_ind])
 
 		return th_g_num / th_g_den
 
@@ -129,10 +129,6 @@ class ConsensusMHSampler(MCMCSampler):
 			acceptance_ratio = np.exp(log)
 		return min(1, acceptance_ratio)
 
-	def calculate_sample_variance(self, sample):
-		total_samples = self.get_saved_states() + [sample]
-		return np.var(np.array(total_samples), axis=0)
-
 	def transition_step(self, candidate_state, acceptance_ratio):
 		u = np.random.uniform()
 		return self.state if u > acceptance_ratio else candidate_state
@@ -140,6 +136,8 @@ class ConsensusMHSampler(MCMCSampler):
 	def get_saved_states(self):
 		return self.saved_states
 
+def get_sample_variance(data):
+	return np.linalg.norm(np.var(np.array(data), axis=0))
 
 # using main MH on the bank data
 def main(dataset):
@@ -189,16 +187,18 @@ def main(dataset):
 	split_output_vector = np.split(output_vector, split_indices)
 
 	log_fns = []
+	weights = []
 	for features, outputs in zip(split_feature_array, split_output_vector):
 		def log_f_split_distribution_fn(val):
 			theta = features.dot(val)
 			p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
 			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-			return np.sum(p_data) + prior
+			return np.sum(p_data) + prior * 0.25
 		log_fns.append(log_f_split_distribution_fn)
+		weights.append(get_sample_variance(features))
 
-	# sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
-	sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4, weights=weights)
+	# sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
 	sampler.sample()
 
 	samples = sampler.get_saved_states()
@@ -226,7 +226,7 @@ def plot_tracking(samples, index, directory_path):
 
 	if not os.path.exists(directory_path):
 		os.makedirs(directory_path)
-	plt.savefig("%s/%s_consensus.png" % (directory_path, index), bbox_inches='tight')
+	plt.savefig("%s/%s_consensus_4shards.png" % (directory_path, index), bbox_inches='tight')
 	plt.clf()
 
 if __name__ == '__main__':
