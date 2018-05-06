@@ -140,38 +140,29 @@ def get_sample_variance(data):
 	return np.linalg.norm(np.var(np.array(data), axis=0))
 
 # using main MH on the bank data
-def main(dataset):
+def main(dataset, sampling_method):
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
-		proposal_variance, burnin, N = .005, 10000, 100000
+		proposal_variance, burnin, N = .001, 10000, 100000
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional.csv')
-		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "bank_large":
 		# N=20000 takes 1-2 min, N=4000000 takes ~5 hours
-		proposal_variance, burnin, N = .0005, 1000, 20000
+		proposal_variance, burnin, N = .0001, 1000, 20000
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional-full.csv')
-		x0 = [0.25, 3, 3, 5.8, -2.8, -3.7, -3.1, -3.3, -3.3, -3, -2.5, -3.1, -2.9, -2.8, 0.7, 0.7, 1, 1]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
 		proposal_variance, burnin, N = 2e-6, 1000, 20000
 		feature_array, output_vector = process_freddie.create_arrays()
-		x0 = [0, 0, 0, 0, 0, 0, 0]
 	else:
 		assert False
 
 	num_features = feature_array.shape[1]
 	prior_mean, prior_variance = np.zeros(num_features), 100
+	x0 = np.zeros(num_features)
 
 	def log_multivariate_gaussian_pdf(x, y, variance):
 		# assuming the covariance matrix is identity * variance
 		return (-0.5 * (x - y).T.dot(np.identity(num_features) / variance).dot(x - y)) - (num_features / 2) * np.log(2 * np.pi * variance)
-
-	def log_f_distribution_fn(val):
-		# calculated based on the formula in section 3.1 of the paper
-		theta = feature_array.dot(val)
-		p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
-		prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-		return np.sum(p_data) + prior
 
 	def log_g_transition_prob(data, given):
 		return log_multivariate_gaussian_pdf(data, given, proposal_variance)
@@ -179,35 +170,45 @@ def main(dataset):
 	def g_sample(val):
 		return np.random.multivariate_normal(val, np.identity(num_features) * proposal_variance)
 
-	num_points = feature_array.shape[0]
-	split_indices = []
-	for i in range(1, 4):
-		split_indices.append(int(math.floor(0.25 * i * num_points)))
-	split_feature_array = np.split(feature_array, split_indices)
-	split_output_vector = np.split(output_vector, split_indices)
+	if sampling_method == "consensus":
+		num_points = feature_array.shape[0]
+		split_indices = []
+		for i in range(1, 4):
+			split_indices.append(int(math.floor(0.25 * i * num_points)))
+		split_feature_array = np.split(feature_array, split_indices)
+		split_output_vector = np.split(output_vector, split_indices)
 
-	log_fns = []
-	weights = []
-	for features, outputs in zip(split_feature_array, split_output_vector):
-		def log_f_split_distribution_fn(val):
-			theta = features.dot(val)
-			p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
+		log_fns = []
+		weights = []
+		for features, outputs in zip(split_feature_array, split_output_vector):
+			def log_f_split_distribution_fn(val):
+				theta = features.dot(val)
+				p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
+				prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
+				return np.sum(p_data) + prior
+			log_fns.append(log_f_split_distribution_fn)
+			weights.append(get_sample_variance(features))
+
+		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
+	elif sampling_method == "MH":
+		def log_f_distribution_fn(val):
+			# calculated based on the formula in section 3.1 of the paper
+			theta = feature_array.dot(val)
+			p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
 			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-			return np.sum(p_data) + prior * 0.25
-		log_fns.append(log_f_split_distribution_fn)
-		weights.append(get_sample_variance(features))
+			return np.sum(p_data) + prior
+		sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	else:
+		assert False
 
-	sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4, weights=weights)
-	# sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
 	sampler.sample()
-
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
 
 	for i in range(num_features):
-		plot_tracking(samples, i, "plots/{}".format(dataset))
+		plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
 
-def plot_tracking(samples, index, directory_path):
+def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.figure(1, figsize=(5, 10))
 
 	plt.subplot(211)
@@ -226,8 +227,9 @@ def plot_tracking(samples, index, directory_path):
 
 	if not os.path.exists(directory_path):
 		os.makedirs(directory_path)
-	plt.savefig("%s/%s_consensus_4shards.png" % (directory_path, index), bbox_inches='tight')
+
+	plt.savefig("%s/%s_%s.png" % (directory_path, index, sampling_method), bbox_inches='tight')
 	plt.clf()
 
 if __name__ == '__main__':
-	main("freddie_mac")
+	main("freddie_mac", "MH")

@@ -2,7 +2,6 @@ import csv
 import numpy as np
 import os
 
-
 '''	
 Dependent Variable:
 whether a loan was foreclosed by the end of september 2017
