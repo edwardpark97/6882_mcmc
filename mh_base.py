@@ -5,6 +5,7 @@ from pathos.multiprocessing import ProcessingPool as Pool
 import process_bank
 import process_freddie
 import os
+import time
 
 class MCMCSampler(object):
 	def __init__(self, log_f, log_g, g_sample, x0, iterations):
@@ -20,6 +21,7 @@ class MCMCSampler(object):
 		self.log_distribution_fn = log_f
 		self.log_transition_probabilities = log_g
 		self.get_transition_sample = g_sample
+		self.start_state = x0
 		self.state = x0
 		self.iterations = iterations
 
@@ -72,13 +74,11 @@ class GibbsSampler(MHSampler):
 		return 1.0
 
 class ConsensusMHSampler(MCMCSampler):
-	def __init__(self, log_f, log_g, g_sample, x0, iterations, shards=1, weights=[1]):
+	def __init__(self, log_f, log_g, g_sample, x0, iterations, shards=1):
 		super(ConsensusMHSampler, self).__init__(log_f, log_g, g_sample, x0, iterations)
 		self.shards = shards
-		self.weights = weights
 
 		assert len(self.log_distribution_fn) == self.shards
-		assert len(self.weights) == self.shards
 		self.log_fn_dict = {} # for pickling purposes
 		for i in range(self.shards):
 			self.log_fn_dict[i] = self.log_distribution_fn[i]
@@ -86,37 +86,44 @@ class ConsensusMHSampler(MCMCSampler):
 		self.pool = Pool(processes=self.shards)
 
 	def sample(self):
+		# for i in range(self.iterations):
+		# 	if i % 1000 == 0:
+		# 		print("iteration {}".format(i))
+		map_results = []
+		for j in range(self.shards):
+			map_results.append(self.map_sample(j))
+		self.saved_states = self.reduce_sample(map_results)
+
+		# self.step_count += 1
+
+	def map_sample(self, index):
+		cur_state = self.start_state
+		sample_results = [cur_state]
 		for i in range(self.iterations):
 			if i % 1000 == 0:
 				print("iteration {}".format(i))
-			map_results = []
-			for j in range(self.shards):
-				map_results.append(self.map_sample(j))
-			new_state = self.reduce_sample(map_results)
-			self.saved_states.append(new_state)
-			self.state = new_state
+			candidate_state = self.get_transition_sample(cur_state)
+			acceptance = self.calculate_acceptance_ratio(candidate_state, index)
+			new_state = self.transition_step(candidate_state, acceptance)
+			sample_results.append(new_state)
+			cur_state = new_state
 
 			self.step_count += 1
+		sample_results = np.array(sample_results)
 
-	def map_sample(self, index):
-		candidate_state = self.get_transition_sample(self.state)
-		acceptance = self.calculate_acceptance_ratio(candidate_state, index)
-		sample = self.transition_step(candidate_state, acceptance)
-
-		return np.array(sample), index
+		return (sample_results, 1.0 / (1e-8 + get_sample_variance(sample_results)))
 
 	def reduce_sample(self, results):
 		'''
-			results is a list of (sample, weight) tuples
+			results is a list of (sample_array, weight) tuples
 		'''
+		sample_results = 0
+		total_weight = 0
+		for sample, weight in results:
+			sample_results += weight * sample
+			total_weight += weight
 
-		th_g_num = 0
-		th_g_den = 0
-		for (sample, weight_ind) in results:
-			th_g_num += sample * float(self.weights[weight_ind])
-			th_g_den += float(self.weights[weight_ind])
-
-		return th_g_num / th_g_den
+		return sample_results / total_weight
 
 	def calculate_acceptance_ratio(self, proposal_state, index=0):
 		log_fn = self.log_fn_dict[index]
@@ -179,7 +186,6 @@ def main(dataset, sampling_method):
 		split_output_vector = np.split(output_vector, split_indices)
 
 		log_fns = []
-		weights = []
 		for features, outputs in zip(split_feature_array, split_output_vector):
 			def log_f_split_distribution_fn(val):
 				theta = features.dot(val)
@@ -187,7 +193,6 @@ def main(dataset, sampling_method):
 				prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
 				return np.sum(p_data) + prior
 			log_fns.append(log_f_split_distribution_fn)
-			weights.append(get_sample_variance(features))
 
 		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
 	elif sampling_method == "MH":
@@ -232,4 +237,9 @@ def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.clf()
 
 if __name__ == '__main__':
+	start_time = time.time()
+	main("freddie_mac", "consensus")
+	print("Consensus 4 shard run time: {}".format(time.time() - start_time))
+	start_time = time.time()
 	main("freddie_mac", "MH")
+	print("MH run time: {}".format(time.time() - start_time))
