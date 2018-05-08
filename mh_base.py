@@ -90,6 +90,7 @@ class ConsensusMHSampler(MCMCSampler):
 		self.saved_states = self.reduce_sample(map_results)
 
 	def map_sample(self, index):
+		np.random.seed()
 		cur_state = self.start_state
 		sample_results = [cur_state]
 		for i in range(self.iterations):
@@ -176,6 +177,8 @@ def main(dataset, sampling_method):
 
 	if sampling_method == "consensus":
 		num_points = feature_array.shape[0]
+		p = np.random.permutation(num_points)
+		feature_array, output_vector = feature_array[p], output_vector[p]
 		split_indices = []
 		for i in range(1, shards):
 			split_indices.append(int(math.floor(1./shards * i * num_points)))
