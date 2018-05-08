@@ -127,6 +127,7 @@ class ConsensusMHSampler(MCMCSampler):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
+		# print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -153,7 +154,8 @@ def main(dataset, sampling_method):
 		x0 = [-2.45, .02, -.125, -.35, -.14, -.75, .35, .1, .1, -.45]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		proposal_variance, burnin, N = 4e-5, 2000, 10000
+		burnin, N = 0, 1000
+		proposal_variance = 4e-5 if sampling_method == "MH" else 8e-4
 		feature_array, output_vector = process_freddie.create_arrays()
 		x0 = [-6.25, -.72, -.23, .56, .04, .11, .05, -.06, .01, .30]
 	else:
