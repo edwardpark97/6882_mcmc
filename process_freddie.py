@@ -31,17 +31,16 @@ def YYYYMM_to_month(date):
 	return 12 * (int(date[:4]) - 2009) + int(date[4:])
 
 def create_row_features(r):
-	def YYYYMM_to_month(date):
-		return 12 * (int(date[:4]) - 2009) + int(date[4:])
-	x = [r[0],					# 0 FICO score
-		YYYYMM_to_month(r[1]),	# 1 date of first mortgage payment
-		YYYYMM_to_month(r[3]),	# 2 maturity date
-		r[5],					# 3 mortgage interest percentage
-		r[8],					# 4 combined loan-to-value ratio
-		r[9],					# 5 debt-to-income ratio
-		r[10],					# 6 original principal balance of the loan
-		r[11],					# 7 original loan-to-value ratio
-		r[12]]					# 8 original interest rate
+	x = [1,						# 0 constant
+		r[0],					# 1 FICO score
+		YYYYMM_to_month(r[1]),	# 2 date of first mortgage payment
+		YYYYMM_to_month(r[3]),	# 3 maturity date
+		r[5],					# 4 mortgage interest percentage
+		r[8],					# 5 combined loan-to-value ratio
+		r[9],					# 6 debt-to-income ratio
+		r[10],					# 7 original principal balance of the loan
+		r[11],					# 8 original loan-to-value ratio
+		r[12]]					# 9 original interest rate
 	return np.array(x)
 
 # PROBABLY NOT USED ANYMORE
@@ -79,7 +78,7 @@ def create_arrays(use_discrete_vars=False):
 
 	q1, q2, q3, q4 = 587250, 654170, 381904, 350521 # num data points in each file
 	num_data_points = q1 + q2 + q3 + q4
-	num_features = 7 if use_discrete_vars else 9 #number of columns from above 
+	num_features = 7 if use_discrete_vars else 10 #number of columns from above 
 
 	feature_array = np.zeros((num_data_points, num_features))
 	output_vector = np.zeros(num_data_points)
@@ -109,9 +108,9 @@ def create_arrays(use_discrete_vars=False):
 				if row[8] == '03':
 					output_vector[row_count] = 1
 
-	# norm each variable to have mean 0 and std 1
-	meaned = feature_array - np.mean(feature_array, axis=0)
-	feature_array = meaned / np.std(meaned, axis=0)
+	# norm each variable (except the constant term) to have mean 0 and std 1
+	meaned = feature_array[:, 1:] - np.mean(feature_array[:, 1:], axis=0)
+	feature_array[:, 1:] = meaned / np.std(meaned, axis=0)
 
 	np.savez("freddie_mac/np_arrays.npz", feature_array=feature_array, output_vector=output_vector)
 

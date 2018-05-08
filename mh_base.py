@@ -43,6 +43,7 @@ class MHSampler(MCMCSampler):
 		for i in range(self.iterations):
 			if i % 1000 == 0:
 				print("iteration {}".format(i))
+				print("sample is {}".format(self.state))
 			candidate_state = self.get_transition_sample(self.state)
 			acceptance = self.calculate_acceptance_ratio(candidate_state)
 			new_state = self.transition_step(candidate_state, acceptance)
@@ -59,7 +60,7 @@ class MHSampler(MCMCSampler):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
-		# print(min(1, acceptance_ratio))
+		print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -150,22 +151,24 @@ def get_sample_variance(data):
 def main(dataset, sampling_method):
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
-		proposal_variance, burnin, N = .001, 10000, 100000
+		proposal_variance, burnin, N = .0015, 10000, 100000
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional.csv')
+		x0 = [-2.5, .1, -.2, -.35, -.05, -1, .5, .2, -.2, -.1]
 	elif dataset == "bank_large":
 		# N=20000 takes 1-2 min, N=4000000 takes ~5 hours
-		proposal_variance, burnin, N = .0001, 1000, 20000
+		proposal_variance, burnin, N = .00015, 2000, 20000
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional-full.csv')
+		x0 = [-2.45, .02, -.125, -.35, -.14, -.75, .35, .1, .1, -.45]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		proposal_variance, burnin, N = 2e-6, 1000, 20000
+		proposal_variance, burnin, N = 4e-5, 2000, 10000
 		feature_array, output_vector = process_freddie.create_arrays()
+		x0 = [-6.25, -.72, -.23, .56, .04, .11, .05, -.06, .01, .30]
 	else:
 		assert False
 
 	num_features = feature_array.shape[1]
 	prior_mean, prior_variance = np.zeros(num_features), 100
-	x0 = np.zeros(num_features)
 
 	def log_multivariate_gaussian_pdf(x, y, variance):
 		# assuming the covariance matrix is identity * variance

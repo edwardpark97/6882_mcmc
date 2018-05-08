@@ -27,15 +27,16 @@ Indexes are 1-indexed
 '''
 
 def create_row_features(r):
-	x = [r[0],		# 0 age
-		r[11],		# 1 campaign
-		r[12],		# 2 pdays
-		r[13],		# 3 previous
-		r[15],		# 4 emp.var.rate
-		r[16],		# 5 cons.price.idx
-		r[17],		# 6 cons.conf.idx
-		r[18],		# 7 euribor3m
-		r[19]]		# 8 nr.employed
+	x = [1,			# 0 constant
+		r[0],		# 1 age
+		r[11],		# 2 campaign
+		r[12],		# 3 pdays
+		r[13],		# 4 previous
+		r[15],		# 5 emp.var.rate
+		r[16],		# 6 cons.price.idx
+		r[17],		# 7 cons.conf.idx
+		r[18],		# 8 euribor3m
+		r[19]]		# 9 nr.employed
 	return np.array(x)
 
 # PROBABLY NOT USED ANYMORE
@@ -69,7 +70,7 @@ def create_arrays(data_path, use_discrete_vars=False):
 		num_data_points = 41188
 	else:
 		assert False
-	num_features = 18 if use_discrete_vars else 9 # number of columns from above 
+	num_features = 18 if use_discrete_vars else 10 # number of columns from above 
 
 	feature_array = np.zeros((num_data_points, num_features))
 	output_vector = np.zeros(num_data_points)
@@ -91,9 +92,9 @@ def create_arrays(data_path, use_discrete_vars=False):
 		# logged = np.log(age_vector)
 		# feature_array[:, 0] = logged - np.mean(logged)
 
-		# norm each variable to have mean 0 and std 1
-		meaned = feature_array - np.mean(feature_array, axis=0)
-		feature_array = meaned / np.std(meaned, axis=0)
+		# norm each variable (except the constant term) to have mean 0 and std 1
+		meaned = feature_array[:, 1:] - np.mean(feature_array[:, 1:], axis=0)
+		feature_array[:, 1:] = meaned / np.std(meaned, axis=0)
 
 		return feature_array, output_vector
 			
