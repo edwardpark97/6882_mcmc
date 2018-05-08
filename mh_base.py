@@ -35,8 +35,12 @@ class MCMCSampler(object):
 	def calculate_acceptance_ratio(self, proposal_state):
 		raise NotImplementedError
 
-	def transition_step(self, candidate_state, acceptance_ratio):
-		raise NotImplementedError
+	def transition_step(self, cur_state, candidate_state, acceptance_ratio):
+		u = np.random.uniform()
+		return cur_state if u > acceptance_ratio else candidate_state
+
+	def get_saved_states(self):
+		return self.saved_states
 
 class MHSampler(MCMCSampler):
 	def sample(self):
@@ -45,7 +49,7 @@ class MHSampler(MCMCSampler):
 				print("iteration {}".format(i))
 			candidate_state = self.get_transition_sample(self.state)
 			acceptance = self.calculate_acceptance_ratio(candidate_state)
-			new_state = self.transition_step(candidate_state, acceptance)
+			new_state = self.transition_step(self.state, candidate_state, acceptance)
 			self.saved_states.append(new_state)
 			self.state = new_state
 
@@ -61,13 +65,6 @@ class MHSampler(MCMCSampler):
 			acceptance_ratio = np.exp(log)
 		# print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
-
-	def transition_step(self, candidate_state, acceptance_ratio):
-		u = np.random.uniform()
-		return self.state if u > acceptance_ratio else candidate_state
-
-	def get_saved_states(self):
-		return self.saved_states
 
 class GibbsSampler(MHSampler):
 	def calculate_acceptance_ratio(self, proposal_state):
@@ -131,12 +128,9 @@ class ConsensusMHSampler(MCMCSampler):
 		# print("%s %s" % (index, min(1, acceptance_ratio)))
 		return min(1, acceptance_ratio)
 
-	def transition_step(self, cur_state, candidate_state, acceptance_ratio):
-		u = np.random.uniform()
-		return cur_state if u > acceptance_ratio else candidate_state
-
-	def get_saved_states(self):
-		return self.saved_states
+class TwoStageMHSampler(ConsensusMHSampler):
+	def __init__(self, log_f, log_g, g_sample, x0, iterations, shards=1):
+		super(TwoStageMHSampler, self).__init__(log_f, log_g, g_sample, x0, iterations, shards)
 
 def get_sample_variance(data):
 	return np.linalg.norm(np.var(np.array(data), axis=0))
@@ -185,15 +179,17 @@ def main(dataset, sampling_method):
 		split_feature_array = np.split(feature_array, split_indices)
 		split_output_vector = np.split(output_vector, split_indices)
 
-		log_fns = []
-		for features, outputs in zip(split_feature_array, split_output_vector):
-			def log_f_split_distribution_fn(val):
-				theta = features.dot(val)
-				p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
-				prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-				return np.sum(p_data) + prior / shards
-			log_fns.append(log_f_split_distribution_fn)
+		def f(val, features, outputs):
+			theta = features.dot(val)
+			p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
+			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
+			return np.sum(p_data) + prior / shards		
 
+		log_fns = [lambda val: f(val, split_feature_array[0], split_output_vector[0]),
+				lambda val: f(val, split_feature_array[1], split_output_vector[1]),
+				lambda val: f(val, split_feature_array[2], split_output_vector[2]),
+				lambda val: f(val, split_feature_array[3], split_output_vector[3])]
+				
 		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=shards)
 	elif sampling_method == "MH":
 		def log_f_distribution_fn(val):
