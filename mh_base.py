@@ -86,9 +86,7 @@ class ConsensusMHSampler(MCMCSampler):
 		self.pool = Pool(processes=self.shards)
 
 	def sample(self):
-		map_results = []
-		for j in range(self.shards):
-			map_results.append(self.map_sample(j))
+		map_results = self.pool.map(self.map_sample, range(self.shards))
 		self.saved_states = self.reduce_sample(map_results)
 
 	def map_sample(self, index):
