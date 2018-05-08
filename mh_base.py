@@ -43,7 +43,6 @@ class MHSampler(MCMCSampler):
 		for i in range(self.iterations):
 			if i % 1000 == 0:
 				print("iteration {}".format(i))
-				print("sample is {}".format(self.state))
 			candidate_state = self.get_transition_sample(self.state)
 			acceptance = self.calculate_acceptance_ratio(candidate_state)
 			new_state = self.transition_step(candidate_state, acceptance)
@@ -87,15 +86,10 @@ class ConsensusMHSampler(MCMCSampler):
 		self.pool = Pool(processes=self.shards)
 
 	def sample(self):
-		# for i in range(self.iterations):
-		# 	if i % 1000 == 0:
-		# 		print("iteration {}".format(i))
 		map_results = []
 		for j in range(self.shards):
 			map_results.append(self.map_sample(j))
 		self.saved_states = self.reduce_sample(map_results)
-
-		# self.step_count += 1
 
 	def map_sample(self, index):
 		cur_state = self.start_state
@@ -194,7 +188,7 @@ def main(dataset, sampling_method):
 				theta = features.dot(val)
 				p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
 				prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-				return np.sum(p_data) + prior
+				return np.sum(p_data) + prior * 0.25
 			log_fns.append(log_f_split_distribution_fn)
 
 		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
