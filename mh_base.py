@@ -59,7 +59,7 @@ class MHSampler(MCMCSampler):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
-		print(min(1, acceptance_ratio))
+		# print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
 
 	def transition_step(self, candidate_state, acceptance_ratio):
@@ -97,7 +97,7 @@ class ConsensusMHSampler(MCMCSampler):
 				print("iteration {}".format(i))
 			candidate_state = self.get_transition_sample(cur_state)
 			acceptance = self.calculate_acceptance_ratio(candidate_state, index)
-			new_state = self.transition_step(candidate_state, acceptance)
+			new_state = self.transition_step(cur_state, candidate_state, acceptance)
 			sample_results.append(new_state)
 			cur_state = new_state
 
@@ -127,12 +127,12 @@ class ConsensusMHSampler(MCMCSampler):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
-		# print(min(1, acceptance_ratio))
+		# print("%s %s" % (index, min(1, acceptance_ratio)))
 		return min(1, acceptance_ratio)
 
-	def transition_step(self, candidate_state, acceptance_ratio):
+	def transition_step(self, cur_state, candidate_state, acceptance_ratio):
 		u = np.random.uniform()
-		return self.state if u > acceptance_ratio else candidate_state
+		return cur_state if u > acceptance_ratio else candidate_state
 
 	def get_saved_states(self):
 		return self.saved_states
@@ -154,7 +154,7 @@ def main(dataset, sampling_method):
 		x0 = [-2.45, .02, -.125, -.35, -.14, -.75, .35, .1, .1, -.45]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		burnin, N = 0, 1000
+		shards, burnin, N = 4, 200, 2000
 		proposal_variance = 4e-5 if sampling_method == "MH" else 8e-4
 		feature_array, output_vector = process_freddie.create_arrays()
 		x0 = [-6.25, -.72, -.23, .56, .04, .11, .05, -.06, .01, .30]
@@ -177,8 +177,8 @@ def main(dataset, sampling_method):
 	if sampling_method == "consensus":
 		num_points = feature_array.shape[0]
 		split_indices = []
-		for i in range(1, 4):
-			split_indices.append(int(math.floor(0.25 * i * num_points)))
+		for i in range(1, shards):
+			split_indices.append(int(math.floor(1./shards * i * num_points)))
 		split_feature_array = np.split(feature_array, split_indices)
 		split_output_vector = np.split(output_vector, split_indices)
 
@@ -188,10 +188,10 @@ def main(dataset, sampling_method):
 				theta = features.dot(val)
 				p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
 				prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-				return np.sum(p_data) + prior * 0.25
+				return np.sum(p_data) + prior / shards
 			log_fns.append(log_f_split_distribution_fn)
 
-		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
+		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=shards)
 	elif sampling_method == "MH":
 		def log_f_distribution_fn(val):
 			# calculated based on the formula in section 3.1 of the paper
