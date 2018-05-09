@@ -45,7 +45,7 @@ class MCMCSampler(object):
 class MHSampler(MCMCSampler):
 	def sample(self):
 		for i in range(self.iterations):
-			if i % 1000 == 0:
+			if i % 500 == 0:
 				print("iteration {}".format(i))
 			candidate_state = self.get_transition_sample(self.state)
 			acceptance = self.calculate_acceptance_ratio(candidate_state)
@@ -87,11 +87,11 @@ class ConsensusMHSampler(MCMCSampler):
 		self.saved_states = self.reduce_sample(map_results)
 
 	def map_sample(self, index):
-		np.random.seed()
+		np.random.seed(0)
 		cur_state = self.start_state
 		sample_results = [cur_state]
 		for i in range(self.iterations):
-			if i % 1000 == 0:
+			if i % 500 == 0:
 				print("iteration {}".format(i))
 			candidate_state = self.get_transition_sample(cur_state)
 			acceptance = self.calculate_acceptance_ratio(candidate_state, index)
@@ -137,6 +137,7 @@ def get_sample_variance(data):
 
 # using main MH on the bank data
 def main(dataset, sampling_method):
+	np.random.seed(0)
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
 		proposal_variance, burnin, N = .0015, 10000, 100000
@@ -149,8 +150,8 @@ def main(dataset, sampling_method):
 		x0 = [-2.45, .02, -.125, -.35, -.14, -.75, .35, .1, .1, -.45]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		shards, burnin, N = 4, 200, 2000
-		proposal_variance = 4e-5 if sampling_method == "MH" else 8e-4
+		shards, burnin, N = 4, 200, 5000
+		proposal_variance = 4e-5 if sampling_method == "MH" else 8e-5
 		feature_array, output_vector = process_freddie.create_arrays()
 		x0 = [-6.25, -.72, -.23, .56, .04, .11, .05, -.06, .01, .30]
 	else:
