@@ -135,6 +135,23 @@ class TwoStageMHSampler(ConsensusMHSampler):
 def get_sample_variance(data):
 	return np.linalg.norm(np.var(np.array(data), axis=0))
 
+def calculate_ess(samples):
+	num_samples = samples.shape[0]
+	if num_samples <= 1:
+		return num_samples
+
+	autocorr_sum = 0
+	for lag in range(1, num_samples - 1):
+		auto_covariance = np.cov(samples[:-lag], samples[lag:], bias=1)
+		autocorr = auto_covariance[0, 1] / np.sqrt(np.prod(np.diag(auto_covariance)))
+		autocorr_sum += autocorr
+
+	return num_samples / (1 + 2 * autocorr_sum)
+
+
+def calculate_edpm(ess, seconds):
+	return ess * 60. / seconds
+
 # using main MH on the bank data
 def main(dataset, sampling_method):
 	np.random.seed(0)
@@ -190,7 +207,8 @@ def main(dataset, sampling_method):
 				lambda val: f(val, split_feature_array[1], split_output_vector[1]),
 				lambda val: f(val, split_feature_array[2], split_output_vector[2]),
 				lambda val: f(val, split_feature_array[3], split_output_vector[3])]
-				
+
+		start_time = time.time()
 		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=shards)
 	elif sampling_method == "MH":
 		def log_f_distribution_fn(val):
@@ -199,13 +217,23 @@ def main(dataset, sampling_method):
 			p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
 			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
 			return np.sum(p_data) + prior
+
+		start_time = time.time()
 		sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
 	else:
 		assert False
 
 	sampler.sample()
+	runtime = time.time() - start_time
+	print("{} run time: {}".format(sampling_method, runtime))
+
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
+
+	effective_sample_size = calculate_ess(samples)
+	effective_draws_per_min = calculate_edpm(effective_sample_size, runtime)
+	print("ESS: {}".format(effective_sample_size))
+	print("EDPM: {}".format(effective_draws_per_min))
 
 	for i in range(num_features):
 		plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
@@ -234,9 +262,5 @@ def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.clf()
 
 if __name__ == '__main__':
-	start_time = time.time()
 	main("freddie_mac", "consensus")
-	print("Consensus 4 shard run time: {}".format(time.time() - start_time))
-	start_time = time.time()
 	main("freddie_mac", "MH")
-	print("MH run time: {}".format(time.time() - start_time))
