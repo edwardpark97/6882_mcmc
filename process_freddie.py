@@ -57,7 +57,6 @@ def create_row_features_discrete(r):
 def create_arrays(use_discrete_vars=False):
 	# Try loading the numpy array
 	if os.path.isfile("freddie_mac/np_arrays.npz"):
-		print("Loading from local")
 		np_array = np.load("freddie_mac/np_arrays.npz")
 		return np_array['feature_array'], np_array['output_vector']
 	else:
