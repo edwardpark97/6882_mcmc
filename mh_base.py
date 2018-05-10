@@ -199,17 +199,17 @@ def calculate_ess(samples):
 		auto_covariance = np.cov(samples[:-lag], samples[lag:], bias=1)
 		return auto_covariance[0, 1] / np.sqrt(np.prod(np.diag(auto_covariance)))
 
-	if PARALLEL == 1:
-		pool = Pool(nodes=4)
-		autocorr_sum = sum(pool.map(autocorr, range(1, num_samples - 1)))
-		pool.close()
-		pool.join()
-	else:
-		autocorr_sum = 0
-		for lag in range(1, num_samples - 1):
-			autocorr_sum += autocorr(lag)
+	# if PARALLEL == 1:
+	# 	pool = Pool(nodes=4)
+	# 	autocorr_sum = sum(pool.map(autocorr, range(1, num_samples - 1)))
+	# 	pool.close()
+	# 	pool.join()
+	# else:
+	# 	autocorr_sum = 0
+	# 	for lag in range(1, num_samples - 1):
+	# 		autocorr_sum += autocorr(lag)
 
-	return num_samples / (1 + 2 * autocorr_sum)
+	return num_samples / (1 + 2 * autocorr(1))
 
 def calculate_edpm(ess, seconds):
 	return ess * 60. / seconds
