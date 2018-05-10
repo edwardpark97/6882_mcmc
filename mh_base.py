@@ -29,8 +29,6 @@ class MCMCSampler(object):
 
 		self.saved_states = [x0]
 
-		self.step_count = 0
-
 	def sample(self):
 		raise NotImplementedError
 
@@ -55,8 +53,6 @@ class MHSampler(MCMCSampler):
 			self.saved_states.append(new_state)
 			self.state = new_state
 
-			self.step_count += 1
-
 	def calculate_acceptance_ratio(self, proposal_state):
 		log = self.log_distribution_fn(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - self.log_distribution_fn(self.state) - self.log_transition_probabilities(proposal_state, self.state)
 		if log > 0:
@@ -65,12 +61,7 @@ class MHSampler(MCMCSampler):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
-		# print(min(1, acceptance_ratio))
 		return min(1, acceptance_ratio)
-
-class GibbsSampler(MHSampler):
-	def calculate_acceptance_ratio(self, proposal_state):
-		return 1.0
 
 class ConsensusMHSampler(MCMCSampler):
 	def __init__(self, log_f, log_g, g_sample, x0, iterations, shards=1):
@@ -102,8 +93,6 @@ class ConsensusMHSampler(MCMCSampler):
 			new_state = self.transition_step(cur_state, candidate_state, acceptance)
 			sample_results.append(new_state)
 			cur_state = new_state
-
-			self.step_count += 1
 		sample_results = np.array(sample_results)
 
 		return (sample_results, 1.0 / (1e-8 + get_sample_variance(sample_results)))
@@ -149,17 +138,13 @@ class TwoStageMHSampler(MHSampler):
 			acceptance1 = self.calculate_acceptance_ratio1(log_acceptance_ratio1)
 			time1 = time.time() - start_time
 
-			u = np.random.uniform()
-			if u < acceptance1:
-				# do second stage
+			if np.random.uniform() < acceptance1: # do second stage
 				acceptance2 = self.calculate_acceptance_ratio2(candidate_state, log_acceptance_ratio1)
-				u = np.random.uniform()
-				if u < acceptance2:
+				if np.random.uniform() < acceptance2:
 					# print("moved")
 					self.state = candidate_state
 
 			self.saved_states.append(self.state)
-			self.step_count += 1
 			time2 = time.time() - start_time
 			# print("ratio of times is %s" % (time2 / time1))
 
@@ -219,18 +204,17 @@ def generate_samples(dataset, sampling_method):
 	np.random.seed(1)
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
-		proposal_variance, burnin, N = .0015, 10000, 100000
+		proposal_variance, N = .0015, 100000
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional.csv')
 		x0 = [-2.5, .1, -.2, -.35, -.05, -1, .5, .2, -.2, -.1]
 	elif dataset == "bank_large":
 		# N=20000 takes 1-2 min, N=4000000 takes ~5 hours
-		proposal_variance, burnin, N = .00015, 2000, 20000
+		proposal_variance, N = .00015, 20000
 		feature_array, output_vector = process_bank.create_arrays('bank-additional/bank-additional-full.csv')
 		x0 = [-2.45, .02, -.125, -.35, -.14, -.75, .35, .1, .1, -.45]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		N = 10000
-		burnin = int(.4 * N)
+		N = 100
 		if sampling_method == "MH":
 			proposal_variance = 4e-5
 		elif sampling_method == "consensus":
@@ -242,7 +226,8 @@ def generate_samples(dataset, sampling_method):
 	else:
 		assert False
 
-	num_features = feature_array.shape[1]
+	burnin = int(.4 * N)
+	num_points, num_features = feature_array.shape[0], feature_array.shape[1]
 	prior_mean, prior_variance = np.zeros(num_features), 100
 
 	def log_multivariate_gaussian_pdf(x, y, variance):
@@ -255,51 +240,40 @@ def generate_samples(dataset, sampling_method):
 	def g_sample(val):
 		return np.random.multivariate_normal(val, np.identity(num_features) * proposal_variance)
 
+	# used as a basis for all the log_f functions in the various sampling methods
+	def f(val, features, outputs, shards=1):
+		theta = features.dot(val)
+		p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
+		prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
+		return np.sum(p_data) + prior / shards # actually is a log value
+
 	if sampling_method == "consensus":
-		num_points = feature_array.shape[0]
 		p = np.random.permutation(num_points)
 		feature_array, output_vector = feature_array[p], output_vector[p]
 		split_indices = []
 		for i in range(1, 4):
 			split_indices.append(int(math.floor(1./4 * i * num_points)))
 		split_feature_array = np.split(feature_array, split_indices)
-		split_output_vector = np.split(output_vector, split_indices)
+		split_output_vector = np.split(output_vector, split_indices)		
 
-		def f(val, features, outputs):
-			theta = features.dot(val)
-			p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
-			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-			return np.sum(p_data) + prior / 4		
-
-		log_fns = [lambda val: f(val, split_feature_array[0], split_output_vector[0]),
-				lambda val: f(val, split_feature_array[1], split_output_vector[1]),
-				lambda val: f(val, split_feature_array[2], split_output_vector[2]),
-				lambda val: f(val, split_feature_array[3], split_output_vector[3])]
+		log_fns = [lambda val: f(val, split_feature_array[0], split_output_vector[0], 4),
+				lambda val: f(val, split_feature_array[1], split_output_vector[1], 4),
+				lambda val: f(val, split_feature_array[2], split_output_vector[2], 4),
+				lambda val: f(val, split_feature_array[3], split_output_vector[3], 4)]
 
 		start_time = time.time()
 		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
+	
 	elif sampling_method == "MH":
-		def log_f_distribution_fn(val):
-			# calculated based on the formula in section 3.1 of the paper
-			theta = feature_array.dot(val)
-			p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
-			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-			return np.sum(p_data) + prior
-
+		log_f_distribution_fn = lambda val: f(val, feature_array, output_vector)
 		start_time = time.time()
 		sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	
 	elif sampling_method == "TwoStage":
-		def log_f2(val):
-			# does the full calculation with the whole array
-			theta = feature_array.dot(val)
-			p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
-			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-			return np.sum(p_data) + prior
+		log_f2 = lambda val: f(val, feature_array, output_vector)
+		true_indices, false_indices = np.nonzero(output_vector)[0], np.nonzero(1 - output_vector)[0]
 
-		true_indices = np.nonzero(output_vector)[0]
-		false_indices = np.nonzero(1 - output_vector)[0]
-
-		a = 400000
+		a = 400000 # number of false entries to subsample for the first stage (out of ~2million)
 		num_false_entries = len(false_indices)
 		false_indices = np.random.choice(false_indices, a, replace=False)
 		true_feature_array, false_feature_array = feature_array[true_indices], feature_array[false_indices]
@@ -312,7 +286,6 @@ def generate_samples(dataset, sampling_method):
 			false_contribution = num_false_entries / a * np.sum(- np.log(1 + np.exp(theta)))
 			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
 			return true_contribution + false_contribution + prior
-
 		start_time = time.time()
 		sampler = TwoStageMHSampler(log_f1, log_f2, log_g_transition_prob, g_sample, x0, N)
 	else:
@@ -351,7 +324,7 @@ def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.savefig("%s/%s_%s.png" % (directory_path, index, sampling_method), bbox_inches='tight')
 	plt.clf()
 
-def main(dataset, sampling_method, sample_name=""):
+def main(dataset, sampling_method, sample_path=""):
 	if os.path.isfile(sample_path):
 		samples = np.load(sample_path)
 	else:
