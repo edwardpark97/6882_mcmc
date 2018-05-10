@@ -7,6 +7,8 @@ import process_freddie
 import os
 import time
 
+PARALLEL = 0
+
 class MCMCSampler(object):
 	def __init__(self, log_f, log_g, g_sample, x0, iterations):
 		"""
@@ -87,7 +89,7 @@ class ConsensusMHSampler(MCMCSampler):
 		self.saved_states = self.reduce_sample(map_results)
 
 	def map_sample(self, index):
-		np.random.seed(0)
+		np.random.seed(1)
 		cur_state = self.start_state
 		sample_results = [cur_state]
 		for i in range(self.iterations):
@@ -128,9 +130,60 @@ class ConsensusMHSampler(MCMCSampler):
 		# print("%s %s" % (index, min(1, acceptance_ratio)))
 		return min(1, acceptance_ratio)
 
-class TwoStageMHSampler(ConsensusMHSampler):
-	def __init__(self, log_f, log_g, g_sample, x0, iterations, shards=1):
-		super(TwoStageMHSampler, self).__init__(log_f, log_g, g_sample, x0, iterations, shards)
+class TwoStageMHSampler(MHSampler):
+	def __init__(self, log_f1, log_f2, log_g, g_sample, x0, iterations):
+		super(TwoStageMHSampler, self).__init__(log_f1, log_g, g_sample, x0, iterations)
+
+		self.log_f1 = log_f1
+		self.log_f2 = log_f2
+
+	def sample(self):
+		for i in range(self.iterations):
+			start_time = time.time()
+			if i % 100 == 0:
+				print("iteration {}".format(i))
+			candidate_state = self.get_transition_sample(self.state)
+			log_acceptance_ratio1 = self.calculate_log_acceptance_ratio1(candidate_state) # store for accep_ratio2 calculation
+			acceptance1 = self.calculate_acceptance_ratio1(log_acceptance_ratio1)
+			time1 = time.time() - start_time
+
+			u = np.random.uniform()
+			if u < acceptance1:
+				# do second stage
+				acceptance2 = self.calculate_acceptance_ratio2(candidate_state, log_acceptance_ratio1)
+				u = np.random.uniform()
+				if u < acceptance2:
+					# print("moved")
+					self.state = candidate_state
+
+			self.saved_states.append(self.state)
+			self.step_count += 1
+			time2 = time.time() - start_time
+			# print("ratio of times is %s" % (time2 / time1))
+
+	def calculate_log_acceptance_ratio1(self, proposal_state):
+		return self.log_f1(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - self.log_f1(self.state) - self.log_transition_probabilities(proposal_state, self.state)
+
+	def calculate_acceptance_ratio1(self, log):
+		if log > 0:
+			acceptance_ratio = 1
+		elif log < -20:
+			acceptance_ratio = 0
+		else:
+			acceptance_ratio = np.exp(log)
+		# print("1", min(1, acceptance_ratio))
+		return min(1, acceptance_ratio)
+
+	def calculate_acceptance_ratio2(self, proposal_state, log_accept_ratio1):
+		log = self.log_f2(proposal_state) - self.log_f2(self.state) - log_accept_ratio1
+		if log > 0:
+			acceptance_ratio = 1
+		elif log < -20:
+			acceptance_ratio = 0
+		else:
+			acceptance_ratio = np.exp(log)
+		# print("2", min(1, acceptance_ratio))
+		return min(1, acceptance_ratio)
 
 def get_sample_variance(data):
 	return np.linalg.norm(np.var(np.array(data), axis=0))
@@ -140,13 +193,32 @@ def calculate_ess(samples):
 	if num_samples <= 1:
 		return num_samples
 
-	autocorr_sum = 0
-	for lag in range(1, num_samples - 1):
+	def autocorr(lag):
 		auto_covariance = np.cov(samples[:-lag], samples[lag:], bias=1)
-		autocorr = auto_covariance[0, 1] / np.sqrt(np.prod(np.diag(auto_covariance)))
-		autocorr_sum += autocorr
+		return auto_covariance[0, 1] / np.sqrt(np.prod(np.diag(auto_covariance)))
+
+	if PARALLEL == 1:
+		pool = Pool(processes=4)
+		autocorr_sum = sum(pool.map(autocorr, range(1, num_samples - 1)))
+	else:
+		autocorr_sum = 0
+		for lag in range(1, num_samples - 1):
+			autocorr_sum += autocorr(lag)
 
 	return num_samples / (1 + 2 * autocorr_sum)
+
+def calculate_ess_parallel(samples):
+	num_samples = samples.shape[0]
+	if num_samples <= 1:
+		return num_samples
+
+	def autocorr(lag):
+		auto_covariance = np.cov(samples[:-lag], samples[lag:], bias=1)
+		return auto_covariance[0, 1] / np.sqrt(np.prod(np.diag(auto_covariance)))
+	pool = Pool(processes=4)
+	results = pool.map(autocorr, range(1, num_samples - 1))
+
+	return num_samples / (1 + 2 * sum(results))
 
 
 def calculate_edpm(ess, seconds):
@@ -154,7 +226,7 @@ def calculate_edpm(ess, seconds):
 
 # using main MH on the bank data
 def main(dataset, sampling_method):
-	np.random.seed(0)
+	np.random.seed(1)
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
 		proposal_variance, burnin, N = .0015, 10000, 100000
@@ -167,8 +239,13 @@ def main(dataset, sampling_method):
 		x0 = [-2.45, .02, -.125, -.35, -.14, -.75, .35, .1, .1, -.45]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		shards, burnin, N = 4, 200, 5000
-		proposal_variance = 4e-5 if sampling_method == "MH" else 8e-5
+		shards, burnin, N = 4, 500, 2000
+		if sampling_method == "MH":
+			proposal_variance = 4e-5
+		elif sampling_method == "consensus":
+			proposal_variance = 8e-5
+		elif sampling_method == "TwoStage":
+			proposal_variance = 8e-6
 		feature_array, output_vector = process_freddie.create_arrays()
 		x0 = [-6.25, -.72, -.23, .56, .04, .11, .05, -.06, .01, .30]
 	else:
@@ -220,6 +297,33 @@ def main(dataset, sampling_method):
 
 		start_time = time.time()
 		sampler = MHSampler(log_f_distribution_fn, log_g_transition_prob, g_sample, x0, N)
+	elif sampling_method == "TwoStage":
+		def log_f2(val):
+			# does the full calculation with the whole array
+			theta = feature_array.dot(val)
+			p_data = np.where(output_vector, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
+			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
+			return np.sum(p_data) + prior
+
+		true_indices = np.nonzero(output_vector)[0]
+		false_indices = np.nonzero(1 - output_vector)[0]
+
+		a = 400000
+		num_false_entries = len(false_indices)
+		false_indices = np.random.choice(false_indices, a, replace=False)
+		true_feature_array, false_feature_array = feature_array[true_indices], feature_array[false_indices]
+
+		def log_f1(val):
+			# does calculations separately between true + false subsampled data points
+			theta = true_feature_array.dot(val)
+			true_contribution = np.sum(theta - np.log(1 + np.exp(theta)))
+			theta = false_feature_array.dot(val)
+			false_contribution = num_false_entries / a * np.sum(- np.log(1 + np.exp(theta)))
+			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
+			return true_contribution + false_contribution + prior
+
+		start_time = time.time()
+		sampler = TwoStageMHSampler(log_f1, log_f2, log_g_transition_prob, g_sample, x0, N)
 	else:
 		assert False
 
@@ -230,13 +334,15 @@ def main(dataset, sampling_method):
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
 
+	for i in range(num_features):
+		plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
+
+	start_time = time.time()
 	effective_sample_size = calculate_ess(samples)
 	effective_draws_per_min = calculate_edpm(effective_sample_size, runtime)
 	print("ESS: {}".format(effective_sample_size))
 	print("EDPM: {}".format(effective_draws_per_min))
-
-	for i in range(num_features):
-		plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
+	print("Calculating these values took {}\n".format(time.time() - start_time))
 
 def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.figure(1, figsize=(5, 10))
@@ -262,5 +368,5 @@ def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.clf()
 
 if __name__ == '__main__':
-	main("freddie_mac", "consensus")
+	main("freddie_mac", "TwoStage")
 	main("freddie_mac", "MH")
