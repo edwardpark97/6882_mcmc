@@ -82,10 +82,12 @@ class ConsensusMHSampler(MCMCSampler):
 		for i in range(self.shards):
 			self.log_fn_dict[i] = self.log_distribution_fn[i]
 
-		self.pool = Pool(processes=self.shards)
+		self.pool = Pool(nodes=self.shards)
 
 	def sample(self):
 		map_results = self.pool.map(self.map_sample, range(self.shards))
+		self.pool.close()
+		self.pool.join()
 		self.saved_states = self.reduce_sample(map_results)
 
 	def map_sample(self, index):
@@ -198,28 +200,16 @@ def calculate_ess(samples):
 		return auto_covariance[0, 1] / np.sqrt(np.prod(np.diag(auto_covariance)))
 
 	if PARALLEL == 1:
-		pool = Pool(processes=4)
+		pool = Pool(nodes=4)
 		autocorr_sum = sum(pool.map(autocorr, range(1, num_samples - 1)))
+		pool.close()
+		pool.join()
 	else:
 		autocorr_sum = 0
 		for lag in range(1, num_samples - 1):
 			autocorr_sum += autocorr(lag)
 
 	return num_samples / (1 + 2 * autocorr_sum)
-
-def calculate_ess_parallel(samples):
-	num_samples = samples.shape[0]
-	if num_samples <= 1:
-		return num_samples
-
-	def autocorr(lag):
-		auto_covariance = np.cov(samples[:-lag], samples[lag:], bias=1)
-		return auto_covariance[0, 1] / np.sqrt(np.prod(np.diag(auto_covariance)))
-	pool = Pool(processes=4)
-	results = pool.map(autocorr, range(1, num_samples - 1))
-
-	return num_samples / (1 + 2 * sum(results))
-
 
 def calculate_edpm(ess, seconds):
 	return ess * 60. / seconds
