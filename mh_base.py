@@ -7,7 +7,7 @@ import process_freddie
 import os
 import time
 
-PARALLEL = 0
+PARALLEL = 1
 
 class MCMCSampler(object):
 	def __init__(self, log_f, log_g, g_sample, x0, iterations):
@@ -215,7 +215,7 @@ def calculate_edpm(ess, seconds):
 	return ess * 60. / seconds
 
 # using main MH on the bank data
-def main(dataset, sampling_method):
+def generate_samples(dataset, sampling_method):
 	np.random.seed(1)
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
@@ -229,7 +229,8 @@ def main(dataset, sampling_method):
 		x0 = [-2.45, .02, -.125, -.35, -.14, -.75, .35, .1, .1, -.45]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		shards, burnin, N = 4, 500, 2000
+		N = 10000
+		burnin = int(.4 * N)
 		if sampling_method == "MH":
 			proposal_variance = 4e-5
 		elif sampling_method == "consensus":
@@ -237,7 +238,7 @@ def main(dataset, sampling_method):
 		elif sampling_method == "TwoStage":
 			proposal_variance = 8e-6
 		feature_array, output_vector = process_freddie.create_arrays()
-		x0 = [-6.25, -.72, -.23, .56, .04, .11, .05, -.06, .01, .30]
+		x0 = [-6.25, -.72, -.23, .56, .04, .13, .05, -.06, 0, .30]
 	else:
 		assert False
 
@@ -259,8 +260,8 @@ def main(dataset, sampling_method):
 		p = np.random.permutation(num_points)
 		feature_array, output_vector = feature_array[p], output_vector[p]
 		split_indices = []
-		for i in range(1, shards):
-			split_indices.append(int(math.floor(1./shards * i * num_points)))
+		for i in range(1, 4):
+			split_indices.append(int(math.floor(1./4 * i * num_points)))
 		split_feature_array = np.split(feature_array, split_indices)
 		split_output_vector = np.split(output_vector, split_indices)
 
@@ -268,7 +269,7 @@ def main(dataset, sampling_method):
 			theta = features.dot(val)
 			p_data = np.where(outputs, theta - np.log(1 + np.exp(theta)), - np.log(1 + np.exp(theta)))
 			prior = log_multivariate_gaussian_pdf(prior_mean, val, prior_variance)
-			return np.sum(p_data) + prior / shards		
+			return np.sum(p_data) + prior / 4		
 
 		log_fns = [lambda val: f(val, split_feature_array[0], split_output_vector[0]),
 				lambda val: f(val, split_feature_array[1], split_output_vector[1]),
@@ -276,7 +277,7 @@ def main(dataset, sampling_method):
 				lambda val: f(val, split_feature_array[3], split_output_vector[3])]
 
 		start_time = time.time()
-		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=shards)
+		sampler = ConsensusMHSampler(log_fns, log_g_transition_prob, g_sample, x0, N, shards=4)
 	elif sampling_method == "MH":
 		def log_f_distribution_fn(val):
 			# calculated based on the formula in section 3.1 of the paper
@@ -324,15 +325,8 @@ def main(dataset, sampling_method):
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
 
-	for i in range(num_features):
-		plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
-
-	start_time = time.time()
-	effective_sample_size = calculate_ess(samples)
-	effective_draws_per_min = calculate_edpm(effective_sample_size, runtime)
-	print("ESS: {}".format(effective_sample_size))
-	print("EDPM: {}".format(effective_draws_per_min))
-	print("Calculating these values took {}\n".format(time.time() - start_time))
+	np.save("samples/{}_{}_{}_{}.npy".format(sampling_method, burnin, N, int(runtime)), samples)
+	return samples
 
 def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.figure(1, figsize=(5, 10))
@@ -357,6 +351,23 @@ def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.savefig("%s/%s_%s.png" % (directory_path, index, sampling_method), bbox_inches='tight')
 	plt.clf()
 
+def main(dataset, sampling_method, sample_name=""):
+	if os.path.isfile(sample_path):
+		samples = np.load(sample_path)
+	else:
+		samples = generate_samples(dataset, sampling_method)
+
+	for i in range(num_features):
+		plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
+
+	start_time = time.time()
+	effective_sample_size = calculate_ess(samples)
+	effective_draws_per_min = calculate_edpm(effective_sample_size, runtime)
+	print("ESS: {}".format(effective_sample_size))
+	print("EDPM: {}".format(effective_draws_per_min))
+	print("Calculating these values took {}\n".format(time.time() - start_time))
+
 if __name__ == '__main__':
 	main("freddie_mac", "TwoStage")
 	main("freddie_mac", "MH")
+	main("freddie_mac", "consensus")
