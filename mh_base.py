@@ -380,7 +380,7 @@ def main(dataset, sampling_method, sample_path="", num_subsamples=200000):
 	else:
 		samples, runtime = generate_samples(dataset, sampling_method, num_subsamples=num_subsamples)
 
-	for i in range(num_features):
+	for i in range(samples.shape[1]):
 	  plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
 
 	effective_sample_size = calculate_ess(samples)
