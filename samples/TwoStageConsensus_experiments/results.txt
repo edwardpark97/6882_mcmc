@@ -1,0 +1,54 @@
+Using dataset freddie_mac, sampling_method TwoStageConsensus, num_subsamples=25000, N=5000, proposal_variance=5e-05
+INDEX 2: Avg speedup per stage 2 skipped is 20.47175164864087
+INDEX 2: Avg stage 1 prob is 0.4747198776398046, avg stage 2 prob is 0.26304947397902345
+INDEX 1: Avg speedup per stage 2 skipped is 20.490864369543043
+INDEX 1: Avg stage 1 prob is 0.4861585006258002, avg stage 2 prob is 0.24972853822502258
+INDEX 3: Avg speedup per stage 2 skipped is 20.818931801478527
+INDEX 3: Avg stage 1 prob is 0.5003724695619141, avg stage 2 prob is 0.067107837219129
+INDEX 0: Avg speedup per stage 2 skipped is 21.61722076651335
+INDEX 0: Avg stage 1 prob is 0.6209470969010319, avg stage 2 prob is 0.29991473515563727
+TwoStageConsensus run time: 890.1595799922943
+
+Using dataset freddie_mac, sampling_method TwoStageConsensus, num_subsamples=50000, N=5000, proposal_variance=5e-05
+INDEX 1: Avg speedup per stage 2 skipped is 12.383882708269255
+INDEX 1: Avg stage 1 prob is 0.489444122460068, avg stage 2 prob is 0.19400101918605223
+INDEX 2: Avg speedup per stage 2 skipped is 12.275998463299695
+INDEX 2: Avg stage 1 prob is 0.48507792782747855, avg stage 2 prob is 0.41306419869911754
+INDEX 3: Avg speedup per stage 2 skipped is 12.54167671588646
+INDEX 3: Avg stage 1 prob is 0.5288803831831692, avg stage 2 prob is 0.16141099210655627
+INDEX 0: Avg speedup per stage 2 skipped is 13.067956228313019
+INDEX 0: Avg stage 1 prob is 0.6365885561057355, avg stage 2 prob is 0.16507230284612645
+TwoStageConsensus run time: 971.3217515945435
+
+Using dataset freddie_mac, sampling_method TwoStageConsensus, num_subsamples=100000, N=5000, proposal_variance=5e-05
+INDEX 2: Avg speedup per stage 2 skipped is 7.676815694735746
+INDEX 2: Avg stage 1 prob is 0.49882673903883396, avg stage 2 prob is 0.2585444979532636
+INDEX 1: Avg speedup per stage 2 skipped is 7.720685859253218
+INDEX 1: Avg stage 1 prob is 0.5118842258580474, avg stage 2 prob is 0.3259824926264067
+INDEX 3: Avg speedup per stage 2 skipped is 7.572553736768083
+INDEX 3: Avg stage 1 prob is 0.5355944338208234, avg stage 2 prob is 0.23394670124690417
+INDEX 0: Avg speedup per stage 2 skipped is 7.744426700529614
+INDEX 0: Avg stage 1 prob is 0.5811017229178851, avg stage 2 prob is 0.3524259096393102
+TwoStageConsensus run time: 1058.6262216567993
+
+Using dataset freddie_mac, sampling_method TwoStageConsensus, num_subsamples=200000, N=5000, proposal_variance=5e-05
+INDEX 2: Avg speedup per stage 2 skipped is 4.722821500408575
+INDEX 2: Avg stage 1 prob is 0.27792194454574626, avg stage 2 prob is 0.3873783948491718
+INDEX 1: Avg speedup per stage 2 skipped is 4.631294968838498
+INDEX 1: Avg stage 1 prob is 0.5077452319197467, avg stage 2 prob is 0.35905444960300487
+INDEX 3: Avg speedup per stage 2 skipped is 4.606083271060869
+INDEX 3: Avg stage 1 prob is 0.4977447317707515, avg stage 2 prob is 0.32929843520761204
+INDEX 0: Avg speedup per stage 2 skipped is 4.675979797582167
+INDEX 0: Avg stage 1 prob is 0.547544036216916, avg stage 2 prob is 0.9029677141843041
+TwoStageConsensus run time: 1197.530149936676
+
+Using dataset freddie_mac, sampling_method TwoStageConsensus, num_subsamples=400000, N=5000, proposal_variance=5e-05
+INDEX 1: Avg speedup per stage 2 skipped is 2.940185987689088
+INDEX 1: Avg stage 1 prob is 0.32749509688915257, avg stage 2 prob is 0.9515793387220131
+INDEX 2: Avg speedup per stage 2 skipped is 2.9194175737942296
+INDEX 2: Avg stage 1 prob is 0.37451228405026626, avg stage 2 prob is 0.9171741150827064
+INDEX 3: Avg speedup per stage 2 skipped is 2.9312551979163035
+INDEX 3: Avg stage 1 prob is 0.40725702796689145, avg stage 2 prob is 0.8219715325683773
+INDEX 0: Avg speedup per stage 2 skipped is 3.0147872928535793
+INDEX 0: Avg stage 1 prob is 0.6254123206768055, avg stage 2 prob is 0.9222163604053927
+TwoStageConsensus run time: 1633.2840716838837

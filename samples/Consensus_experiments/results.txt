@@ -1,0 +1,6 @@
+Using dataset freddie_mac, sampling_method Consensus, a=400000, N=1000, proposal_variance=0.0002
+INDEX 2: Avg acceptance prob is 0.1853905852451212
+INDEX 1: Avg acceptance prob is 0.1615715137110052
+INDEX 0: Avg acceptance prob is 0.5292839387233117
+INDEX 3: Avg acceptance prob is 0.19142784337112329
+Consensus run time: 273.9956302642822

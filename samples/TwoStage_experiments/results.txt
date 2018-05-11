@@ -1,0 +1,29 @@
+Using value a=25000
+Avg speedup per stage 2 skipped is 101.94940055765059
+Avg stage 1 prob is 0.4933103095991132, avg stage 2 prob is 0.1256666564176448
+TwoStage run time: 1078.2951107025146
+
+Using value a=50000
+Avg speedup per stage 2 skipped is 59.48519611723445
+Avg stage 1 prob is 0.5004416695097389, avg stage 2 prob is 0.1583981529023995
+TwoStage run time: 1110.8098561763763
+
+Using value a=100000
+Avg speedup per stage 2 skipped is 32.80622418472256
+Avg stage 1 prob is 0.5250006816810493, avg stage 2 prob is 0.23658292244702125
+TwoStage run time: 1194.8087124824524
+
+Using value a=200000
+Avg speedup per stage 2 skipped is 17.557815901351248
+Avg stage 1 prob is 0.5235559809545289, avg stage 2 prob is 0.2960614678024625
+TwoStage run time: 1243.695076227188
+
+Using value a=400000
+Avg speedup per stage 2 skipped is 9.053902042015496
+Avg stage 1 prob is 0.539373545843072, avg stage 2 prob is 0.336405592137026
+TwoStage run time: 1366.0374834537506
+
+Using value a=800000
+Avg speedup per stage 2 skipped is 4.655863739762468
+Avg stage 1 prob is 0.5656178866829019, avg stage 2 prob is 0.4166186498676749
+TwoStage run time: 1599.229983329773
