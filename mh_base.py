@@ -127,11 +127,14 @@ class TwoStageMHSampler(MHSampler):
 
 		self.log_f1 = log_f1
 		self.log_f2 = log_f2
+		self.stage_1_prob, self.stage_1_count = 0, 0
+		self.stage_2_prob, self.stage_2_count = 0, 0
+		self.ratio_time, self.ratio_time_count = 0, 0
 
 	def sample(self):
 		for i in range(self.iterations):
 			start_time = time.time()
-			if i % 100 == 0:
+			if i % 500 == 0:
 				print("iteration {}".format(i))
 			candidate_state = self.get_transition_sample(self.state)
 			log_acceptance_ratio1 = self.calculate_log_acceptance_ratio1(candidate_state) # store for accep_ratio2 calculation
@@ -143,10 +146,13 @@ class TwoStageMHSampler(MHSampler):
 				if np.random.uniform() < acceptance2:
 					# print("moved")
 					self.state = candidate_state
+				self.ratio_time += (time.time() - start_time) / time1
+				self.ratio_time_count += 1
 
 			self.saved_states.append(self.state)
-			time2 = time.time() - start_time
-			# print("ratio of times is %s" % (time2 / time1))
+
+		print("Avg speedup per stage 2 skipped is {}".format(self.ratio_time / self.ratio_time_count))  
+		print("Avg stage 1 prob is {}, avg stage 2 prob is {}".format(self.stage_1_prob/self.stage_1_count, self.stage_2_prob/self.stage_2_count))
 
 	def calculate_log_acceptance_ratio1(self, proposal_state):
 		return self.log_f1(proposal_state) + self.log_transition_probabilities(self.state, proposal_state) - self.log_f1(self.state) - self.log_transition_probabilities(proposal_state, self.state)
@@ -158,7 +164,8 @@ class TwoStageMHSampler(MHSampler):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
-		# print("1", min(1, acceptance_ratio))
+		self.stage_1_count += 1
+		self.stage_1_prob += min(1, acceptance_ratio)
 		return min(1, acceptance_ratio)
 
 	def calculate_acceptance_ratio2(self, proposal_state, log_accept_ratio1):
@@ -169,38 +176,29 @@ class TwoStageMHSampler(MHSampler):
 			acceptance_ratio = 0
 		else:
 			acceptance_ratio = np.exp(log)
-		# print("2", min(1, acceptance_ratio))
+		self.stage_2_count += 1
+		self.stage_2_prob += min(1, acceptance_ratio)
 		return min(1, acceptance_ratio)
 
 def get_sample_variance(data):
 	return np.linalg.norm(np.var(np.array(data), axis=0))
 
-def calculate_ess(samples):
-	num_samples = samples.shape[0]
-	if num_samples <= 1:
-		return num_samples
+def calculate_ess(samples): # uses matplotlib to calculate ESS for each dimension, return min
+	num_samples, num_features = samples.shape[0], samples.shape[1]
+	zeroed = samples - np.mean(samples, axis=0)
+	samples = zeroed / np.std(zeroed, axis=0)
 
-	def autocorr(lag):
-		auto_covariance = np.cov(samples[:-lag], samples[lag:], bias=1)
-		return auto_covariance[0, 1] / np.sqrt(np.prod(np.diag(auto_covariance)))
-
-	# if PARALLEL == 1:
-	# 	pool = Pool(nodes=4)
-	# 	autocorr_sum = sum(pool.map(autocorr, range(1, num_samples - 1)))
-	# 	pool.close()
-	# 	pool.join()
-	# else:
-	# 	autocorr_sum = 0
-	# 	for lag in range(1, num_samples - 1):
-	# 		autocorr_sum += autocorr(lag)
-
-	return num_samples / (1 + 2 * autocorr(1))
+	ess_by_dimension = np.zeros(num_features)
+	for i in range(num_features):
+		_, c, _, _ = plt.gca().acorr(samples[:, i], maxlags=num_samples-1)
+		ess_by_dimension[i] = num_samples / (1 + 2 * sum(c[c.size//2:]))
+	return np.min(ess_by_dimension)
 
 def calculate_edpm(ess, seconds):
 	return ess * 60. / seconds
 
 # using main MH on the bank data
-def generate_samples(dataset, sampling_method):
+def generate_samples(dataset, sampling_method, a=400000):
 	np.random.seed(1)
 	if dataset == "bank_small":
 		# N=100000 takes 1-2 min
@@ -214,7 +212,7 @@ def generate_samples(dataset, sampling_method):
 		x0 = [-2.45, .02, -.125, -.35, -.14, -.75, .35, .1, .1, -.45]
 	elif dataset == "freddie_mac":
 		# N=2000 takes about 7 min, N=100000 takes ~6 hours
-		N = 100
+		N = 5000
 		if sampling_method == "MH":
 			proposal_variance = 4e-5
 		elif sampling_method == "consensus":
@@ -226,6 +224,7 @@ def generate_samples(dataset, sampling_method):
 	else:
 		assert False
 
+	print("\nUsing dataset {}, sampling_method {}, a={}, N={}, proposal_variance={}".format(dataset, sampling_method, a, N, proposal_variance))
 	burnin = int(.4 * N)
 	num_points, num_features = feature_array.shape[0], feature_array.shape[1]
 	prior_mean, prior_variance = np.zeros(num_features), 100
@@ -254,7 +253,7 @@ def generate_samples(dataset, sampling_method):
 		for i in range(1, 4):
 			split_indices.append(int(math.floor(1./4 * i * num_points)))
 		split_feature_array = np.split(feature_array, split_indices)
-		split_output_vector = np.split(output_vector, split_indices)		
+		split_output_vector = np.split(output_vector, split_indices)        
 
 		log_fns = [lambda val: f(val, split_feature_array[0], split_output_vector[0], 4),
 				lambda val: f(val, split_feature_array[1], split_output_vector[1], 4),
@@ -273,7 +272,7 @@ def generate_samples(dataset, sampling_method):
 		log_f2 = lambda val: f(val, feature_array, output_vector)
 		true_indices, false_indices = np.nonzero(output_vector)[0], np.nonzero(1 - output_vector)[0]
 
-		a = 400000 # number of false entries to subsample for the first stage (out of ~2million)
+		# a = 400000 # number of false entries to subsample for the first stage (out of ~2million)
 		num_false_entries = len(false_indices)
 		false_indices = np.random.choice(false_indices, a, replace=False)
 		true_feature_array, false_feature_array = feature_array[true_indices], feature_array[false_indices]
@@ -293,13 +292,13 @@ def generate_samples(dataset, sampling_method):
 
 	sampler.sample()
 	runtime = time.time() - start_time
-	print("{} run time: {}".format(sampling_method, runtime))
+	print("{} run time: {}\n".format(sampling_method, runtime))
 
 	samples = sampler.get_saved_states()
 	samples = np.array(samples[burnin:])
 
-	np.save("samples/{}_{}_{}_{}.npy".format(sampling_method, burnin, N, int(runtime)), samples)
-	return samples
+	np.save("samples/{}_{}_{}_{}_{}.npy".format(sampling_method, burnin, N, int(runtime), a), samples)
+	return samples, runtime
 
 def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.figure(1, figsize=(5, 10))
@@ -324,23 +323,25 @@ def plot_tracking(samples, index, directory_path, sampling_method):
 	plt.savefig("%s/%s_%s.png" % (directory_path, index, sampling_method), bbox_inches='tight')
 	plt.clf()
 
-def main(dataset, sampling_method, sample_path=""):
+# a is the # of datapoints chosen for the first stage of twostage
+def main(dataset, sampling_method, sample_path="", a=400000):
 	if os.path.isfile(sample_path):
 		samples = np.load(sample_path)
+
+		file_name = sample_path.split("/")[-1].split(".")[0]
+		runtime = float(file_name.split("_")[3]) # assuming same naming conventions samplingMethod_burnin_N_runtime.npy
 	else:
-		samples = generate_samples(dataset, sampling_method)
+		samples, runtime = generate_samples(dataset, sampling_method, a=a)
 
 	for i in range(num_features):
-		plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
+	  plot_tracking(samples, i, "plots/{}".format(dataset), sampling_method)
 
-	start_time = time.time()
 	effective_sample_size = calculate_ess(samples)
 	effective_draws_per_min = calculate_edpm(effective_sample_size, runtime)
 	print("ESS: {}".format(effective_sample_size))
-	print("EDPM: {}".format(effective_draws_per_min))
-	print("Calculating these values took {}\n".format(time.time() - start_time))
+	print("EDPM: {}\n".format(effective_draws_per_min))
 
 if __name__ == '__main__':
-	main("freddie_mac", "TwoStage")
-	main("freddie_mac", "MH")
-	main("freddie_mac", "consensus")
+	# main("freddie_mac", "TwoStage", sample_path="samples/consensus_4000_10000_2736.npy")
+	# main("freddie_mac", "TwoStage", sample_path="samples/MH_4000_10000_4262.npy")
+	# main("freddie_mac", "TwoStage", sample_path="samples/TwoStage_4000_10000_2839.npy")
