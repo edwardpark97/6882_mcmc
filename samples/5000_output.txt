@@ -1,0 +1,38 @@
+Using dataset freddie_mac, sampling_method TwoStageConsensus, num_subsamples=200000, N=5000, proposal_variance=5e-05
+iteration 0
+iteration 0
+iteration 0
+iteration 0
+INDEX 2: Avg speedup per stage 2 skipped is 4.68847322462917
+INDEX 2: Avg stage 1 prob is 0.2823393911163908, avg stage 2 prob is 0.4789367267383092
+INDEX 0: Avg speedup per stage 2 skipped is 4.54494521287758
+INDEX 0: Avg stage 1 prob is 0.4278529542028181, avg stage 2 prob is 0.9576422977647207
+INDEX 1: Avg speedup per stage 2 skipped is 4.720609202961068
+INDEX 1: Avg stage 1 prob is 0.4417290128866673, avg stage 2 prob is 0.25878803147065566
+INDEX 3: Avg speedup per stage 2 skipped is 4.75213999760037
+INDEX 3: Avg stage 1 prob is 0.5422687549427786, avg stage 2 prob is 0.6310861872375326
+TwoStageConsensus run time: 1162.065847158432
+
+
+Using dataset freddie_mac, sampling_method TwoStage, num_subsamples=200000, N=5000, proposal_variance=8e-06
+iteration 0
+Avg speedup per stage 2 skipped is 16.72091694170439
+Avg stage 1 prob is 0.5215969585725122, avg stage 2 prob is 0.15769858448682883
+TwoStage run time: 1239.622242450714
+
+
+Using dataset freddie_mac, sampling_method Consensus, num_subsamples=200000, N=5000, proposal_variance=0.0002
+iteration 0
+iteration 0
+iteration 0
+iteration 0
+INDEX 2: Avg acceptance prob is 0.08962809916394494
+INDEX 0: Avg acceptance prob is 0.2900079509823205
+INDEX 1: Avg acceptance prob is 0.13475446295637628
+INDEX 3: Avg acceptance prob is 0.25480834306347844
+Consensus run time: 1365.4037659168243
+
+
+Using dataset freddie_mac, sampling_method MH, num_subsamples=200000, N=5000, proposal_variance=4e-05
+iteration 0
+MH run time: 2134.105744600296
